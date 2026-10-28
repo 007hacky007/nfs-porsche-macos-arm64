@@ -1,0 +1,21 @@
+/game_backup/
+/local/
+/gen/
+/out/
+/.venv/
+/.superpowers/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Private development notes and machine-specific configuration.
+/docs/superpowers/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*.dmp

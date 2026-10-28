@@ -1,0 +1,3 @@
+-r requirements.txt
+# Test oracle only; never linked into the native game.
+unicorn==2.1.4

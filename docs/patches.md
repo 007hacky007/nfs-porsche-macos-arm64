@@ -4,7 +4,14 @@ Run `./build.sh` with your own supported game folder or disc image. The builder 
 
 ## Combined Patch v1.1
 
-The automatic builder uses the pinned, checksum-verified community mirror authorized for this project, because the original author download is unavailable. Mirror archive SHA-256: `cc3087b5f8914dd47ab4e2b54da2e68c4caa03ab4871c11183a4720eba193d66`. The previously inspected archive `bb69d935b49dfe7ab71e22608102d01b985a4ca41c9e8559e765ed2d0149d5a2` remains accepted by the internal preparation tool. All 147 original archive members match; the mirror's additional `Copy/fe_out.txt` is ignored.
+The automatic builder uses the pinned, checksum-verified community mirror authorized for this project, because the original author download is unavailable. These checksums cover the complete ZIP file, before extraction:
+
+| Archive variant | Exact filename | Exact size (bytes) | SHA-256 of ZIP file |
+| --- | --- | ---: | --- |
+| Mirror used by the builder | `NFS5-Combined-Patch-v1.1.zip` | 14026990 | `cc3087b5f8914dd47ab4e2b54da2e68c4caa03ab4871c11183a4720eba193d66` |
+| Previously inspected archive, accepted by the internal preparation tool | `NFS5-Combined-Patch-v1.1.zip` | 14023356 | `bb69d935b49dfe7ab71e22608102d01b985a4ca41c9e8559e765ed2d0149d5a2` |
+
+All 147 original archive members match; the mirror's additional `Copy/fe_out.txt` is ignored.
 
 | Component | Native integration |
 | --- | --- |
@@ -22,7 +29,11 @@ Data fixes come from NFS5 Essentials by ND4SPD Racer, the Combined Patch contrib
 
 ## SilentPatch Build 1
 
-Archive SHA-256: `6c3b181301f3b6e646f4f42ad8e89f74dd3fea95cc028d055c56ddab7e0fd1b8`.
+The complete downloaded ZIP file is verified before extraction:
+
+| Exact filename | Exact size (bytes) | SHA-256 of ZIP file |
+| --- | ---: | --- |
+| `SilentPatchNFS90s.zip` | 1122658 | `6c3b181301f3b6e646f4f42ad8e89f74dd3fea95cc028d055c56ddab7e0fd1b8` |
 
 The Windows ASI and proxy DirectInput DLL are not loaded into the ARM64 app. Its NFS Porsche fixes are implemented through native platform services:
 

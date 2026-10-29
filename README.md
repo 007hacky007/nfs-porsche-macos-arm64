@@ -43,7 +43,9 @@ When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to App
 
 The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), and macOS cursor visibility. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch. **Use in-game setting** lets the game's graphics menu control race resolution; choosing a specific launcher resolution overrides that setting for the session and selects 32-bit color when available. Menus and movies keep their original resolution. The frame-rate limit is a cap; the game and display can run slower.
 
-The build extracts the original Windows game icon from your supplied `Porsche.exe` before patching and converts it to a macOS icon during packaging. No game icon is included in this repository.
+![NFSV launcher with resolution, frame-rate, fullscreen and cursor settings](docs/images/launcher.png)
+
+The build extracts the original Windows game icon from your supplied `Porsche.exe` before patching and converts it to a macOS icon during packaging. No standalone game icon is included for packaging.
 
 If a checksum fails, use a complete, unmodified supported copy. Renaming an unsupported executable or changing a version string will not make it compatible. `./build.sh --help` shows the accepted inputs.
 

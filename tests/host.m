@@ -20,8 +20,23 @@ static void drain_paste(unsigned count){
 @implementation TestPasteView
 - (void)paste:(id)sender{(void)sender;[self insertText:@"Bookkeeper" replacementRange:NSMakeRange(NSNotFound,0)];}
 @end
+@interface CursorTestView : NFSVView
+@property(nonatomic,strong) NSCursor *installedCursor;
+@end
+@implementation CursorTestView
+- (void)addCursorRect:(NSRect)rect cursor:(NSCursor *)cursor{(void)rect;self.installedCursor=cursor;}
+@end
 int main(void){@autoreleasepool{
     [NSApplication sharedApplication];
+    CursorTestView *cursorView=[[CursorTestView alloc] initWithFrame:NSMakeRect(0,0,640,480)];
+    [cursorView resetCursorRects];CHECK(cursorView.installedCursor);
+    CHECK(cursorView.installedCursor.image.valid&&cursorView.installedCursor.image.representations.count);
+    NSBitmapImageRep *cursorPixels=[NSBitmapImageRep imageRepWithData:cursorView.installedCursor.image.TIFFRepresentation];
+    CHECK(cursorPixels&&cursorPixels.hasAlpha);
+    for(NSInteger y=0;y<cursorPixels.pixelsHigh;y++)for(NSInteger x=0;x<cursorPixels.pixelsWide;x++)
+        CHECK([cursorPixels colorAtX:x y:y].alphaComponent==0);
+    setenv("NFSV_HIDE_CURSOR","0",1);[cursorView resetCursorRects];CHECK(cursorView.installedCursor==NSCursor.arrowCursor);
+    unsetenv("NFSV_HIDE_CURSOR");
     NSWindow *window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,1440,1080)
         styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
     NFSVView *view=[[NSClassFromString(@"NFSVView") alloc] initWithFrame:NSMakeRect(0,0,1440,1080)];

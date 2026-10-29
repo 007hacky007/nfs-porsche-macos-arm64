@@ -1,5 +1,6 @@
 #include "thrash.h"
 #include "render.h"
+#include "display.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,12 +16,7 @@ static const struct {const char *name;unsigned args;} exports[]={
 };
 static unsigned calls[41];
 /* Keep the original slots stable: saved settings contain mode indices. */
-static const unsigned mode_sizes[][2]={
- {640,480},{800,600},{1024,768},{1280,1024},{1600,1200},
- {1920,1080},{1920,1200},{2048,1536},{2560,1440},{2560,1600},
- {2560,1920},{2880,1800},{2880,2160},{3024,1964},{3840,2160},{4096,3072}
-};
-enum {MODE_COUNT=sizeof mode_sizes/sizeof mode_sizes[0]*2};
+enum {MODE_COUNT=DISPLAY_MODE_COUNT*2};
 static uint32_t descriptor,modes,states[512][8],selected_window,lockinfo,lockbits;
 static unsigned width=640,height=480,bits=16;
 static int locked;
@@ -50,7 +46,7 @@ static uint32_t about(void){
  strcpy((char *)guest_ptr(descriptor+0x80,80),"Metal");
  for(unsigned i=1;i<=MODE_COUNT;i++){
   unsigned size=i<=10?(i-1)%5:5+(i-11)/2,bpp=i<=10?(i<=5?16:32):((i-11)%2?32:16);
-  uint32_t p=modes+i*40;MR32(p)=mode_sizes[size][0];MR32(p+4)=mode_sizes[size][1];MR32(p+8)=bpp;MR32(p+12)=bpp==16?4:6;MR32(p+16)=1;MR32(p+20)=3;MR32(p+24)=2;
+  uint32_t p=modes+i*40;MR32(p)=display_mode_sizes[size][0];MR32(p+4)=display_mode_sizes[size][1];MR32(p+8)=bpp;MR32(p+12)=bpp==16?4:6;MR32(p+16)=1;MR32(p+20)=3;MR32(p+24)=2;
  }
  return descriptor;
 }

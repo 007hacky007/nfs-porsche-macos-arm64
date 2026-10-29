@@ -1,5 +1,6 @@
 #include "runtime.h"
 #include "image.h"
+#include "launch_settings.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -14,6 +15,7 @@ void dispatch_init(void){
         if (offset >= DISPATCH_TEXT_SIZE){ fputs("generated function outside image\n", stderr); exit(1); }
         g_dtab[offset] = g_fn_ptr[i];
     }
+    launch_settings_init();
     fprintf(stderr, "%u native functions bound\n", g_fn_count);
 }
 

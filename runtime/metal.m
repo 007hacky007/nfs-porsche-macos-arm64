@@ -4,6 +4,9 @@
 #include "runtime.h"
 #include "render.h"
 #include "shader.h"
+#include "display.h"
+#include <errno.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -146,13 +149,27 @@ int render_texture(unsigned handle,unsigned w,unsigned h,unsigned level,unsigned
  render_flush();[t replaceRegion:MTLRegionMake2D(0,0,w,h) mipmapLevel:level withBytes:pixels bytesPerRow:w*4];return 1;
 }
 void render_texture_free(unsigned h){render_flush();[textures removeObjectForKey:@(h)];}
+static void limit_frame_rate(void){
+ static int limit=-1;static uint64_t deadline;
+ if(limit<0){const char *value=getenv("NFSV_FPS_LIMIT");limit=value&&(!strcmp(value,"30")||!strcmp(value,"60")||!strcmp(value,"120"))?atoi(value):0;}
+ if(!limit)return;
+ struct timespec now;clock_gettime(CLOCK_MONOTONIC,&now);
+ uint64_t current=(uint64_t)now.tv_sec*1000000000ull+now.tv_nsec;
+ deadline=display_frame_deadline(current,deadline,(unsigned)limit);
+ if(deadline>current){
+  uint64_t wait=deadline-current;struct timespec remaining={(time_t)(wait/1000000000ull),(long)(wait%1000000000ull)};
+  CPU *cpu=g_cur_cpu;guest_unlock();
+  while(nanosleep(&remaining,&remaining)&&errno==EINTR){}
+  guest_lock(cpu);
+ }
+}
 void render_present(int front){
  if(!color)return;if(encoder){[encoder endEncoding];encoder=nil;}
  CAMetalLayer *layer=(__bridge CAMetalLayer *)host_metal_layer();
  id<CAMetalDrawable> drawable=[layer nextDrawable];if(!drawable){render_flush();return;}
  if(!command)command=[queue commandBuffer];id<MTLBlitCommandEncoder> blit=[command blitCommandEncoder];
  if(!front)[blit copyFromTexture:color sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(width,height,1) toTexture:front_color destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
- [blit copyFromTexture:front_color sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(width,height,1) toTexture:drawable.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[blit endEncoding];[command presentDrawable:drawable];render_flush();host_frame_presented();
+ [blit copyFromTexture:front_color sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(width,height,1) toTexture:drawable.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];[blit endEncoding];[command presentDrawable:drawable];render_flush();limit_frame_rate();host_frame_presented();
  frames++;
  if(frames==1||frames%120==0)fprintf(stderr,"Metal presented frame %u\n",frames);
  const char *capture=getenv("NFSV_CAPTURE");unsigned interval=capture?(unsigned)strtoul(capture,NULL,10):0;

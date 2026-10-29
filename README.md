@@ -41,6 +41,8 @@ The script sets up `.venv`, extracts images, verifies all game-data and executab
 
 When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications; it contains a private copy of the prepared files and needs no separate game-folder selection. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
 
+The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), and macOS cursor visibility. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch. **Use in-game setting** lets the game's graphics menu control race resolution; choosing a specific launcher resolution overrides that setting for the session and selects 32-bit color when available. Menus and movies keep their original resolution. The frame-rate limit is a cap; the game and display can run slower.
+
 The build extracts the original Windows game icon from your supplied `Porsche.exe` before patching and converts it to a macOS icon during packaging. No game icon is included in this repository.
 
 If a checksum fails, use a complete, unmodified supported copy. Renaming an unsupported executable or changing a version string will not make it compatible. `./build.sh --help` shows the accepted inputs.
@@ -50,8 +52,8 @@ If a checksum fails, use a complete, unmodified supported copy. Renaming an unsu
 - Original game code for menus, garage, Quick Race, Evolution and Factory Driver.
 - Native Metal rendering, including textures, depth, fog and the patched primitive-drawing path.
 - HD, 1440p and 4K race resolutions in 16 and 32 bit color.
-- Fullscreen on startup; Control-Command-F, F11 or the green window button toggles it.
-- Original in-game pointer, with the Mac cursor hidden inside the game view.
+- Pre-game display settings, remembered between launches. Fullscreen is the initial default; Control-Command-F, F11 or the green window button toggles it while playing.
+- Original in-game pointer, with the Mac cursor hidden inside the game view by default and restored outside the window.
 - Keyboard/mouse input and Command-V or Control-V text paste.
 - Original sound effects, music, movies and movie audio through CoreAudio and Metal.
 - Switching apps releases held controls and keeps display/audio active without restarting the song.
@@ -118,6 +120,8 @@ The builder creates a different `Porsche.exe` in its private prepared folder by 
 The build reads the verified 32-bit x86 executable from your locally prepared copy, discovers its functions and statically translates their instructions to C. Apple Clang then compiles that generated C to ARM64 machine code. The generated source contains code derived from your game copy; it exists only in ignored build directories and is never part of the repository.
 
 The original game's logic, menus, physics, AI, modes and movie decoder run as compiled ARM64 functions. This is not an engine recreation. Windows imports are handled by native compatibility code for files, memory, threads and input. The original Thrash graphics interface is implemented with Metal; Cocoa provides windows and CoreAudio provides audio. The finished app does not use Wine, Rosetta or a runtime x86 interpreter.
+
+When a launcher resolution is selected, a native callback updates the original front-end resolution accessor before its original getter runs. The game then selects its video mode through its normal path. This changes runtime settings; the supplied executable and bundled game assets remain unchanged. The optional native frame cap releases the guest lock while waiting so audio and other guest threads can continue.
 
 It still preserves the original 32-bit address space, x86 register/flag state, x87/SSE semantics and indirect-call dispatch in its generated code. That adds overhead compared with a port written from the original C/C++ source. ARM64 uses 64-bit floating-point intermediates where x86 could use 80-bit x87 values, so exact numerical equivalence is not guaranteed in every path.
 

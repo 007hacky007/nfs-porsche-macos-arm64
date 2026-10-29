@@ -1,6 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #import <CommonCrypto/CommonDigest.h>
 #include "image.h"
+#import "settings.h"
 
 static NSString *validate(NSURL *folder){
     NSFileManager *files=NSFileManager.defaultManager;
@@ -32,6 +33,7 @@ int main(void){@autoreleasepool{
         }
         [settings setObject:folder.path forKey:@"GameFolder"];
     }
+    if(!launcher_choose_settings(settings))return 0;
     NSError *error=nil;NSFileManager *files=NSFileManager.defaultManager;
     NSURL *support=[[files URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask].firstObject URLByAppendingPathComponent:@"NFSV" isDirectory:YES];
     NSURL *output=[support URLByAppendingPathComponent:@"out" isDirectory:YES];
@@ -41,7 +43,7 @@ int main(void){@autoreleasepool{
     NSFileHandle *handle=[NSFileHandle fileHandleForWritingAtPath:log.path];
     NSTask *task=[NSTask new];task.executableURL=[NSBundle.mainBundle.executableURL.URLByDeletingLastPathComponent URLByAppendingPathComponent:@"NFSVEngine"];
     task.arguments=@[[folder URLByAppendingPathComponent:@"Porsche.exe"].path];task.currentDirectoryURL=support;
-    NSMutableDictionary *environment=[NSProcessInfo.processInfo.environment mutableCopy];
+    NSMutableDictionary *environment=[launcher_environment(settings,NSProcessInfo.processInfo.environment) mutableCopy];
     [environment removeObjectForKey:@"NFSV_CAPTURE"];
     environment[@"NFSV_SAVE_DIR"]=support.path;environment[@"NFSV_TIMEOUT"]=@"0";task.environment=environment;
     task.standardOutput=handle;task.standardError=handle;

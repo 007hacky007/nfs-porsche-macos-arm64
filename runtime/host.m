@@ -14,6 +14,20 @@ static unsigned width=640,height=480;
 static _Atomic long frame_count;
 static _Atomic int closing;
 
+static NSCursor *game_cursor(void){
+    const char *hide=getenv("NFSV_HIDE_CURSOR");
+    if(hide&&!strcmp(hide,"0"))return NSCursor.arrowCursor;
+    static NSCursor *invisible;
+    if(!invisible){
+        NSBitmapImageRep *pixels=[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:16 pixelsHigh:16
+            bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:64 bitsPerPixel:32];
+        memset(pixels.bitmapData,0,pixels.bytesPerRow*pixels.pixelsHigh);
+        NSImage *image=[[NSImage alloc] initWithSize:NSMakeSize(16,16)];[image addRepresentation:pixels];
+        invisible=[[NSCursor alloc] initWithImage:image hotSpot:NSZeroPoint];
+    }
+    return invisible;
+}
+
 void *host_metal_device(void){if(!device)device=MTLCreateSystemDefaultDevice();return (__bridge void *)device;}
 void *host_metal_queue(void){if(!queue){host_metal_device();queue=[device newCommandQueue];}return (__bridge void *)queue;}
 void *host_metal_layer(void){return (__bridge void *)layer;}
@@ -54,6 +68,8 @@ static Key key(unsigned code){
 @end
 @implementation NFSVView
 - (BOOL)acceptsFirstResponder{return YES;}
+- (void)resetCursorRects{[self addCursorRect:self.bounds cursor:game_cursor()];}
+- (void)cursorUpdate:(NSEvent *)event{(void)event;[game_cursor() set];}
 - (BOOL)performKeyEquivalent:(NSEvent *)event{
     if(event.keyCode==9&&(event.modifierFlags&NSEventModifierFlagCommand)){[self paste:nil];return YES;}
     return [super performKeyEquivalent:event];
@@ -93,7 +109,7 @@ static Key key(unsigned code){
 - (void)updateTrackingAreas{
     for(NSTrackingArea *area in self.trackingAreas.copy)[self removeTrackingArea:area];
     [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:self.bounds
-        options:NSTrackingMouseMoved|NSTrackingActiveInKeyWindow|NSTrackingInVisibleRect owner:self userInfo:nil]];
+        options:NSTrackingMouseMoved|NSTrackingCursorUpdate|NSTrackingActiveInKeyWindow|NSTrackingInVisibleRect owner:self userInfo:nil]];
     [super updateTrackingAreas];
 }
 - (void)mouse:(NSEvent *)event button:(int)button down:(int)down wheel:(int)wheel{
@@ -131,10 +147,7 @@ static Key key(unsigned code){
 }
 - (void)resetCursorRects{
     /* AppKit restores the normal cursor outside this view or when it loses focus. */
-    static NSCursor *invisible;
-    if(!invisible){NSImage *image=[[NSImage alloc] initWithSize:NSMakeSize(16,16)];
-        invisible=[[NSCursor alloc] initWithImage:image hotSpot:NSZeroPoint];}
-    [self addCursorRect:self.bounds cursor:invisible];
+    [self addCursorRect:self.bounds cursor:game_cursor()];
 }
 @end
 

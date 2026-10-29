@@ -4,6 +4,16 @@
 #include <math.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#x);exit(1);}}while(0)
 int main(void){
+    unsigned width=0,height=0;
+    CHECK(display_resolution("1920x1080",&width,&height)&&width==1920&&height==1080);
+    CHECK(display_resolution("640x480",&width,&height)&&width==640&&height==480);
+    CHECK(!display_resolution("9999x9999",&width,&height));
+    CHECK(!display_resolution("1920x1080extra",&width,&height));
+    CHECK(!display_resolution(NULL,&width,&height));
+    CHECK(display_frame_deadline(1000000000,0,60)==1000000000);
+    CHECK(display_frame_deadline(1001000000,1000000000,60)==1016666666);
+    CHECK(display_frame_deadline(1200000000,1000000000,60)==1200000000);
+    CHECK(display_frame_deadline(1001000000,1000000000,0)==1001000000);
     DisplayRect r=display_fit(640,480,1920,1080);
     CHECK(r.x==240&&r.y==0&&r.w==1440&&r.h==1080);
     r=display_fit(1920,1080,800,600);

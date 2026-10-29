@@ -13,7 +13,7 @@ class SourceDistributionTests(unittest.TestCase):
         if result.returncode:
             self.skipTest('source archive has no git metadata')
         forbidden = {'.exe', '.dll', '.asi', '.icd', '.iso', '.bin', '.cue', '.mdf', '.mds',
-                     '.fsh', '.crp', '.mad', '.sav', '.zip', '.7z', '.rar'}
+                     '.fsh', '.crp', '.mad', '.sav', '.zip', '.7z', '.rar', '.ico', '.icns'}
         for name in result.stdout.decode().split('\0'):
             if not name:
                 continue

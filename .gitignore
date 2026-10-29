@@ -39,6 +39,8 @@ __pycache__/
 *.7z
 *.rar
 *.app/
+*.ico
+*.icns
 **/[Gg][Aa][Mm][Ee][Dd][Aa][Tt][Aa]/
 **/[Ff][Ee][Dd][Aa][Tt][Aa]/
 **/[Ss][Aa][Vv][Ee][Dd][Aa][Tt][Aa]/

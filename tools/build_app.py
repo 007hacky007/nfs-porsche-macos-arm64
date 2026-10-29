@@ -74,6 +74,7 @@ def source_directory(source, temporary_parent):
 def prepared_game(source, cache, project=ROOT):
     from tools.downloads import COMBINED_SHA, SILENT_SHA, fetch_patches
     from tools.inspect_pe import inspect_pe, require_supported
+    from tools.package import windows_icon
     from tools.patches import prepare_game
 
     project, cache = Path(project), Path(cache).expanduser().resolve()
@@ -84,6 +85,7 @@ def prepared_game(source, cache, project=ROOT):
     with source_directory(source, local) as folder:
         step('Checking all game-data and source-executable checksums')
         original = verify_game(folder)
+        icon = windows_icon(original.files[Path('Porsche.exe')])
         print(f'Accepted {original.version}: {original.assets_sha256}', flush=True)
         step('Fetching verified patches (or checking their download cache)')
         combined, silent = fetch_patches(cache / 'patches')
@@ -98,6 +100,7 @@ def prepared_game(source, cache, project=ROOT):
             image = require_supported(inspect_pe(destination / 'Porsche.exe'))
             if saved.get('prepared_assets_sha256') != actual or 'native-linked' not in image:
                 raise ValueError('prepared game cache checksum changed; remove that local/builds entry and retry')
+            (destination / 'OriginalGame.ico').write_bytes(icon)
             print('Reusing verified prepared game files.', flush=True)
             return destination
         step('Applying Combined Patch v1.1 and preparing native patch behavior')
@@ -112,6 +115,7 @@ def prepared_game(source, cache, project=ROOT):
                     'prepared_assets_sha256': assets_digest(game_files(working)),
                     'combined_sha256': report['combined_sha256'], 'silent_sha256': report['silent_sha256']}
             (working / 'build-input.json').write_text(json.dumps(info, indent=2) + '\n')
+            (working / 'OriginalGame.ico').write_bytes(icon)
             working.rename(destination)
         return destination
 

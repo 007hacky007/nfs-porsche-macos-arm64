@@ -4,11 +4,56 @@ import argparse
 import os
 import plistlib
 import shutil
+import struct
 import subprocess
 import tempfile
 from pathlib import Path
 
+import pefile
+
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def windows_icon(executable):
+    """Reconstruct an ICO from the supplied executable's original resources."""
+    pe = pefile.PE(str(executable))
+    try:
+        resources = {entry.id: entry for entry in
+                     getattr(getattr(pe, 'DIRECTORY_ENTRY_RESOURCE', None), 'entries', [])}
+        if 3 not in resources or 14 not in resources:
+            raise ValueError('supplied game executable has no Windows app icon')
+
+        def read(entry):
+            data = entry.directory.entries[0].data.struct
+            return pe.get_data(data.OffsetToData, data.Size)
+
+        group = read(resources[14].directory.entries[0])
+        reserved, kind, count = struct.unpack_from('<HHH', group)
+        if (reserved, kind) != (0, 1) or not count or len(group) != 6 + 14 * count:
+            raise ValueError('invalid Windows app icon group')
+        images = {entry.id: entry for entry in resources[3].directory.entries}
+        directory, payload = bytearray(group[:6]), bytearray()
+        for index in range(count):
+            width, height, colors, reserved, planes, bits, size, identifier = struct.unpack_from(
+                '<BBBBHHIH', group, 6 + 14 * index)
+            bitmap = read(images[identifier])
+            if len(bitmap) != size:
+                raise ValueError('Windows app icon resource size mismatch')
+            directory.extend(struct.pack('<BBBBHHII', width, height, colors, reserved,
+                                         planes, bits, size, 6 + 16 * count + len(payload)))
+            payload.extend(bitmap)
+        return bytes(directory + payload)
+    finally:
+        pe.close()
+
+
+def write_app_icon(icon, destination):
+    destination = Path(destination)
+    with tempfile.TemporaryDirectory(prefix='.icon-', dir=destination.parent) as temporary:
+        source = Path(temporary) / 'original.ico'
+        source.write_bytes(icon)
+        subprocess.run(['sips', '-s', 'format', 'icns', str(source), '--out', str(destination)],
+                       check=True, capture_output=True)
 
 
 def copy_game_files(source, destination):
@@ -38,6 +83,7 @@ def package(game):
                         '-Igen/all', 'launcher/main.m', '-framework', 'Cocoa', '-o', str(macos / 'NFSV')], check=True)
         shutil.copy2('out/nfsv', macos / 'NFSVEngine')
         copy_game_files(game, contents / 'Resources/Game')
+        write_app_icon((Path(game) / 'OriginalGame.ico').read_bytes(), contents / 'Resources/NFSV.icns')
         notices = contents / 'Resources/ThirdPartyNotices'
         notices.mkdir()
         for path in (ROOT / 'third_party').glob('*LICENSE'):
@@ -45,6 +91,7 @@ def package(game):
         plist = {
             'CFBundleIdentifier': 'org.nfsv.local', 'CFBundleName': 'NFSV', 'CFBundleDisplayName': 'NFSV',
             'CFBundleExecutable': 'NFSV', 'CFBundlePackageType': 'APPL',
+            'CFBundleIconFile': 'NFSV.icns',
             'CFBundleShortVersionString': '0.1', 'CFBundleVersion': '1',
             'LSMinimumSystemVersion': '11.0', 'LSMultipleInstancesProhibited': True,
             'NSHighResolutionCapable': True,

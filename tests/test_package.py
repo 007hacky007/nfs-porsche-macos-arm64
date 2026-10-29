@@ -16,6 +16,7 @@ class PackageTests(unittest.TestCase):
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_bytes(b'fixture')
             (source / 'private.log').write_bytes(b'private')
+            (source / 'OriginalGame.ico').write_bytes(b'build-time icon')
             (source / 'PatchSources').mkdir()
             (source / 'PatchSources/archive.zip').write_bytes(b'not part of the app')
             target = root / 'bundle/Game'
@@ -23,4 +24,5 @@ class PackageTests(unittest.TestCase):
             self.assertTrue((target / 'GameData/car.bin').is_file())
             self.assertTrue((target / 'Porsche.exe').is_file())
             self.assertFalse((target / 'private.log').exists())
+            self.assertFalse((target / 'OriginalGame.ico').exists())
             self.assertFalse((target / 'PatchSources').exists())

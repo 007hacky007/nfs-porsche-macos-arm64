@@ -41,6 +41,8 @@ The script sets up `.venv`, extracts images, verifies all game-data and executab
 
 When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications; it contains a private copy of the prepared files and needs no separate game-folder selection. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
 
+The build extracts the original Windows game icon from your supplied `Porsche.exe` before patching and converts it to a macOS icon during packaging. No game icon is included in this repository.
+
 If a checksum fails, use a complete, unmodified supported copy. Renaming an unsupported executable or changing a version string will not make it compatible. `./build.sh --help` shows the accepted inputs.
 
 ## Features

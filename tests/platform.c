@@ -2,6 +2,7 @@
 #include "image.h"
 #include "input.h"
 #include "audio.h"
+#include "render.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 #include <sys/stat.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <math.h>
 #undef assert
 #define assert(value) do { if(!(value)){fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#value);exit(1);} } while(0)
 
@@ -72,6 +74,13 @@ int main(void){
     cpu.esp=0x7f010000; cpu.fs_base=0xc00000; cpu.fcw=0x37f;
     MR32(cpu.fs_base+0x18)=cpu.fs_base; MR32(cpu.fs_base+0x24)=1; MR32(cpu.fs_base+0x2c)=0xc01000;
     platform_init(); guest_lock(&cpu);
+    if(IMAGE_SIZE>0x300000){
+        cpu.top=0;cpu.st[0]=0.5;api("_CItan",0,NULL);assert(fabs(cpu.st[0]-tan(0.5))<1e-12);
+        cpu.top=0;cpu.st[0]=2;cpu.st[1]=1;api("_CIatan2",0,NULL);assert(cpu.top==1&&fabs(cpu.st[1]-atan2(1,2))<1e-12);
+        uint32_t placement=0xc0d100;memset(g_mem+placement,0,44);MR32(placement)=44;
+        uint32_t window_args[]={0xb00001,placement};assert(api("GetWindowPlacement",2,window_args)==1);
+        assert(MR32(placement)==44&&MR32(placement+8)==1&&MR32(placement+36)==640&&MR32(placement+40)==480);
+    }
     uint32_t cbargs[]={123,456};
     g_dtab[0]=callback;
     assert(call_guest(&cpu,DISPATCH_TEXT_BASE,2,cbargs)==579);
@@ -256,6 +265,24 @@ int main(void){
     }
     heap_totals(&mode_live_after,NULL,NULL,NULL);
     assert(mode_live_after==mode_live_before);
+    strcpy((char *)g_mem+0xc0b080,"_THRASH_setstate@8");
+    uint32_t stateproc=api("GetProcAddress",2,procargs),disabled_state[]={0,1};
+    assert(call_guest(&cpu,stateproc,2,disabled_state)==0);
+    disabled_state[0]=0x6c;assert(call_guest(&cpu,stateproc,2,disabled_state)==0);
+    uint32_t packet=0xc0e000,verts=packet+64,idx=verts+128;
+    memset(g_mem+packet,0,256);MR32(packet)=4;MR32(packet+4)=0x1c4;MR32(packet+8)=verts;MR16(packet+12)=3;
+    RenderVertex triangle[3]={{.x=10,.y=10,.z=.5,.rhw=1,.diffuse=0xffff0000},
+        {.x=10,.y=60,.z=.5,.rhw=1,.diffuse=0xffff0000},{.x=60,.y=10,.z=.5,.rhw=1,.diffuse=0xffff0000}};
+    for(unsigned i=0;i<3;i++)memcpy(g_mem+verts+i*32,&triangle[i],32);
+    uint32_t packetargs[]={2,0};assert(call_guest(&cpu,stateproc,2,packetargs)==1);
+    packetargs[0]=0x1b3;packetargs[1]=packet;
+    int clip[]={0,0,640,480};render_clear(0xff000000,1,0,clip);
+    assert(call_guest(&cpu,stateproc,2,packetargs)==1);
+    uint32_t pixel;assert(render_read(20,20,1,1,&pixel,0));assert((pixel&0xffffff)==0xff0000);
+    MR32(packet+16)=idx;MR16(packet+20)=3;MR16(idx)=0;MR16(idx+2)=1;MR16(idx+4)=2;
+    render_clear(0xff000000,1,0,clip);assert(call_guest(&cpu,stateproc,2,packetargs)==1);
+    assert(render_read(20,20,1,1,&pixel,0));assert((pixel&0xffffff)==0xff0000);
+    MR16(idx+4)=3;assert(call_guest(&cpu,stateproc,2,packetargs)==0);
     strcpy((char *)g_mem+0xc0b080,"_THRASH_not_an_export@0");
     assert(api("GetProcAddress",2,procargs)==0);
     char files[]="out/test-files-XXXXXX",assets[256],saves[256],path[512];
@@ -307,6 +334,10 @@ int main(void){
     assert(!pthread_create(&worker,NULL,scheduled_worker,NULL));
     for(unsigned i=0;i<1000000&&!atomic_load(&scheduled);i++)watch_check(0x401000);
     assert(atomic_load(&scheduled));
+#ifdef GAME_KEYBOARD_BUFFER
+    memset(g_mem+GAME_KEYBOARD_BUFFER,1,128);win32_post_message(8,0,0);
+    for(unsigned i=0;i<128;i++)assert(!MR8(GAME_KEYBOARD_BUFFER+i));
+#endif
     guest_unlock();assert(!pthread_join(worker,NULL));
     unlink(registry);
     puts("platform: callbacks, stdcall cleanup and extended waits passed");

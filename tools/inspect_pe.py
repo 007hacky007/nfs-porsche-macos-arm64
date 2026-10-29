@@ -10,6 +10,7 @@ import pefile
 
 # Populated only after a source and plaintext image have been verified.
 SUPPORTED = {
+    '13273410b8951e3785a5def780667d6101b1f72e8ac8fd9561f13b3cf724267b': 'NFSV Combined Patch v1.1 native-linked',
     '02437ddbf41af86dffe14251b28ed8889bd1c4c904fe77ff730d8912257ec90d': 'NFSV v3.5 USA',
 }
 PROTECTED = {

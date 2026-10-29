@@ -50,14 +50,37 @@ static Key key(unsigned code){
 }
 
 @interface NFSVView : NSView
+- (void)insertText:(id)text replacementRange:(NSRange)range;
 @end
 @implementation NFSVView
 - (BOOL)acceptsFirstResponder{return YES;}
+- (BOOL)performKeyEquivalent:(NSEvent *)event{
+    if(event.keyCode==9&&(event.modifierFlags&NSEventModifierFlagCommand)){[self paste:nil];return YES;}
+    return [super performKeyEquivalent:event];
+}
 - (void)keyDown:(NSEvent *)event{
     if(event.keyCode==103){[self.window toggleFullScreen:nil];return;}
+    if(event.keyCode==9&&(event.modifierFlags&(NSEventModifierFlagCommand|NSEventModifierFlagControl))){[self paste:nil];return;}
+    if(event.keyCode==118&&(event.modifierFlags&NSEventModifierFlagOption)){[self.window performClose:nil];return;}
     Key k=key(event.keyCode);if(k.scan)input_key(k.scan,k.vk,1);
     NSString *text=event.characters;
     for(NSUInteger i=0;i<text.length;i++){unichar ch=[text characterAtIndex:i];if(ch<0xf700)input_text(ch);}
+}
+- (void)insertText:(id)text replacementRange:(NSRange)range{
+    (void)range;
+    NSString *string=[text isKindOfClass:NSAttributedString.class]?[text string]:text;
+    unsigned accepted=0;uint8_t bytes[1024];
+    for(NSUInteger i=0;i<string.length&&accepted<1024;i++){
+        NSData *encoded=[[string substringWithRange:NSMakeRange(i,1)] dataUsingEncoding:NSWindowsCP1252StringEncoding allowLossyConversion:NO];
+        if(encoded.length!=1)continue;
+        unsigned ch=((const unsigned char *)encoded.bytes)[0];if(ch<32||ch==127)continue;
+        bytes[accepted++]=(uint8_t)ch;
+    }
+    input_paste(bytes,accepted);
+}
+- (void)paste:(id)sender{
+    (void)sender;NSString *text=[NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString];
+    if(text)[self insertText:text replacementRange:NSMakeRange(NSNotFound,0)];
 }
 - (void)keyUp:(NSEvent *)event{if(event.keyCode==103)return;Key k=key(event.keyCode);if(k.scan)input_key(k.scan,k.vk,0);}
 - (void)flagsChanged:(NSEvent *)event{

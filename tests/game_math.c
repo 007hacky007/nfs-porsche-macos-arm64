@@ -19,7 +19,9 @@ int main(int argc,char **argv){
  uint32_t values[]={0x80808080,0x10801080,0xeb80eb80,0x00800080,0xff80ff80};
  for(unsigned i=0;i<5;i++){MR32(0xc02000)=values[i];uint32_t convert[]={0xc02000,0xc02020,1};cdecl_call(0x592610,3,convert);printf("%08x -> %08x\n",values[i],MR32(0xc02020));}
  mem_commit(0x2000000,0x200000);
- FILE *movie=fopen("local/game/FEData/movies/earts-av.mad","rb");if(!movie)return 1;size_t bytes=fread(guest_ptr(0x2080000,400000),1,400000,movie);fclose(movie);if(bytes<0x8e4)return 1;
+ char movie_path[4096];snprintf(movie_path,sizeof movie_path,"%s",argv[1]);
+ char *slash=strrchr(movie_path,'/');if(!slash)return 1;snprintf(slash,(size_t)(movie_path+sizeof movie_path-slash),"/FEData/movies/earts-av.mad");
+ FILE *movie=fopen(movie_path,"rb");if(!movie)return 1;size_t bytes=fread(guest_ptr(0x2080000,400000),1,400000,movie);fclose(movie);if(bytes<0x8e4)return 1;
  unsigned decoded=0;
  for(uint32_t offset=0;offset+24<bytes && decoded<12;){
   uint32_t packet=0x2080000+offset,length=MR32(packet+4)&0xffffff;if(length<8||offset+length>bytes)return 1;

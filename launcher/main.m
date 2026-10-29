@@ -9,10 +9,10 @@ static NSString *validate(NSURL *folder){
     }
     NSData *exe=[NSData dataWithContentsOfURL:[folder URLByAppendingPathComponent:@"Porsche.exe"] options:NSDataReadingMappedIfSafe error:nil];
     if(!exe)return @"The selected folder is missing Porsche.exe.";
-    if(exe.length!=IMAGE_FILE_SIZE)return @"This build requires the original v3.5 USA executable.";
+    if(exe.length!=IMAGE_FILE_SIZE)return @"This build requires the game folder prepared for this native build. See the README preparation command.";
     unsigned char digest[CC_SHA256_DIGEST_LENGTH];CC_SHA256(exe.bytes,(CC_LONG)exe.length,digest);
     NSMutableString *hex=[NSMutableString new];for(unsigned i=0;i<sizeof digest;i++)[hex appendFormat:@"%02x",digest[i]];
-    if(![hex isEqualToString:@IMAGE_SHA256])return @"This build requires the original v3.5 USA executable.";
+    if(![hex isEqualToString:@IMAGE_SHA256])return @"This build requires the game folder prepared for this native build. See the README preparation command.";
     return nil;
 }
 static void alert(NSString *message){

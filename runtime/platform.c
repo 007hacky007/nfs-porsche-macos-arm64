@@ -76,7 +76,17 @@ static uint32_t module_handle(const char *name){
 static int core_call(CPU *c, const Import *imp, uint32_t *out){
     const char *n = imp->name;
     uint32_t r = 0;
-    if (!strcmp(n, "GetVersion")) r = 0x0a280105;
+    if (!strcasecmp(imp->dll,"MSVCRT.dll")){
+        if(!strcmp(n,"_CItan"))ST(0)=tan(ST(0));
+        else if(!strcmp(n,"_CIatan2")){double value=atan2(ST(1),ST(0));FPOP();ST(0)=value;}
+        else if(!strcmp(n,"strrchr")||!strcmp(n,"strchr")){
+            const char *start=S(A(c,0));const char *found=!strcmp(n,"strchr")?strchr(start,(int)A(c,1)):strrchr(start,(int)A(c,1));
+            if(found)r=A(c,0)+(uint32_t)(found-start);
+        }
+        else if(!strcmp(n,"_stricmp"))r=(uint32_t)strcasecmp(S(A(c,0)),S(A(c,1)));
+        else return 0;
+    }
+    else if (!strcmp(n, "GetVersion")) r = 0x0a280105;
     else if (!strcmp(n, "GetVersionExA")){
         uint32_t p = A(c, 0); uint8_t *v = guest_ptr(p, 148);
         memset(v + 4, 0, 144); MR32(p+4)=5; MR32(p+8)=1; MR32(p+12)=2600; MR32(p+16)=2; r=1;

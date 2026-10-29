@@ -12,6 +12,9 @@ static struct { InputEvent queue[1024]; unsigned head,count; uint32_t notificati
 static uint32_t sequence;
 static struct {uint32_t message,wp,lp;} messages[2048];
 static unsigned message_head,message_count;
+static uint8_t paste[1024];
+static unsigned paste_count,paste_position,paste_previous;
+static uint64_t paste_next;
 void win32_signal_event(uint32_t);
 void win32_post_message(uint32_t,uint32_t,uint32_t);
 static void message(uint32_t code,uint32_t wp,uint32_t lp){
@@ -41,9 +44,16 @@ void input_key(unsigned scan,unsigned vk,int down){
 void input_text(unsigned character){
     if(character<256){pthread_mutex_lock(&lock);message(0x102,character,1);pthread_mutex_unlock(&lock);}
 }
+void input_paste(const uint8_t *text,unsigned count){
+    pthread_mutex_lock(&lock);
+    paste_count=count<sizeof paste?count:sizeof paste;
+    memcpy(paste,text,paste_count);paste_position=paste_previous=0;paste_next=0;
+    pthread_mutex_unlock(&lock);
+}
 void input_focus(int active){
     pthread_mutex_lock(&lock);
     if(!active){
+        paste_count=paste_position=0;
         for(unsigned scan=0;scan<256;scan++)if(keys[scan]){
             event(1,scan,0);
             message(0x101,key_vks[scan],1u|((scan&127)<<16)|(scan>=128?0x1000000u:0u)|0xc0000000u);
@@ -55,7 +65,9 @@ void input_focus(int active){
         memset(keys,0,sizeof keys);memset(vkeys,0,sizeof vkeys);memset(buttons,0,sizeof buttons);
         delta_x=delta_y=delta_z=0;
     }
-    message(0x1c,!!active,0);message(6,!!active,0);message(active?7:8,0,0);
+    /* Metal surfaces and CoreAudio keep running when the Mac window loses
+       focus. Windows display deactivation makes the game reset both. */
+    message(active?7:8,0,0);
     uint32_t keyboard_event=queues[0].notification,mouse_event=queues[1].notification;
     pthread_mutex_unlock(&lock);
     if(keyboard_event)win32_signal_event(keyboard_event);if(mouse_event)win32_signal_event(mouse_event);
@@ -101,6 +113,15 @@ int input_key_state(unsigned vk){
 void input_cursor(int *x,int *y){pthread_mutex_lock(&lock);if(x)*x=mouse_x;if(y)*y=mouse_y;pthread_mutex_unlock(&lock);}
 void input_pump(void){
     pthread_mutex_lock(&lock);
+    struct timespec ts;clock_gettime(CLOCK_MONOTONIC,&ts);
+    uint64_t now=(uint64_t)ts.tv_sec*1000+ts.tv_nsec/1000000;
+    /* The original game's character vector holds only 64 entries and pops
+       them in reverse order. Deliver one letter per UI update interval. */
+    if(paste_position<paste_count&&now>=paste_next){
+        unsigned ch=paste[paste_position++];
+        if(ch==paste_previous)message(0x102,2,1);
+        message(0x102,ch,1);paste_previous=ch;paste_next=now+35;
+    }
     while(message_count){
         unsigned i=message_head;message_head=(message_head+1)%2048;message_count--;
         win32_post_message(messages[i].message,messages[i].wp,messages[i].lp);

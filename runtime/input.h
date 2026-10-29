@@ -4,6 +4,7 @@
 typedef struct { uint32_t offset, value, time, sequence; } InputEvent;
 void input_key(unsigned scan,unsigned vk,int down);
 void input_text(unsigned character);
+void input_paste(const uint8_t *text,unsigned count);
 void input_focus(int active);
 void input_mouse(int x,int y,int button,int down,int wheel);
 void input_keyboard_state(uint8_t *out);

@@ -704,7 +704,13 @@ static void wm_push(uint32_t m, uint32_t wp, uint32_t lp){
     g_wmq_tail = nx;
 }
 /* autotest.c: synthetic WM_KEYDOWN/WM_KEYUP/WM_CHAR */
-void win32_post_message(uint32_t m, uint32_t wp, uint32_t lp){ wm_push(m, wp, lp); }
+void win32_post_message(uint32_t m, uint32_t wp, uint32_t lp){
+#ifdef GAME_KEYBOARD_BUFFER
+    /* Modern Patch's WndProc does not clear the original keyboard buffer. */
+    if(m==8&&mem_valid(GAME_KEYBOARD_BUFFER,128))memset(g_mem+GAME_KEYBOARD_BUFFER,0,128);
+#endif
+    wm_push(m, wp, lp);
+}
 /* free entries in the queue (keyboard.c moves host messages in up to that) */
 int win32_msg_room(void){ return (g_wmq_head - g_wmq_tail - 1 + WMQ) % WMQ; }
 static int wm_pop(uint32_t *m, uint32_t *wp, uint32_t *lp){
@@ -1600,6 +1606,21 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
                         case 4: r=19; break; case 5: r=1; break; case 6: r=1; break;
                         case 32: r=4; case 33: r=4; break; default: r=0; } }
     else if (!strcmp(n,"AdjustWindowRect")){ r=1; }
+    else if (!strcmp(n,"GetWindowPlacement")){
+        uint32_t p=A(c,1);unsigned w=640,h=480;void metal_game_size(unsigned*,unsigned*);metal_game_size(&w,&h);
+        if(MR32(p)!=44)win32_set_last_error(c,87);
+        else{memset(guest_ptr(p,44),0,44);MR32(p)=44;MR32(p+8)=1;MR32(p+36)=w;MR32(p+40)=h;r=1;}
+    }
+    else if (!strcmp(n,"SetWindowPlacement"))r=MR32(A(c,1))==44;
+    else if (!strcmp(n,"MonitorFromWindow"))r=1;
+    else if (!strcmp(n,"GetMonitorInfoA")){
+        uint32_t p=A(c,1);unsigned w=640,h=480;void metal_game_size(unsigned*,unsigned*);metal_game_size(&w,&h);
+        if(MR32(p)!=40)win32_set_last_error(c,87);
+        else{memset(guest_ptr(p,40),0,40);MR32(p)=40;MR32(p+12)=MR32(p+28)=w;MR32(p+16)=MR32(p+32)=h;MR32(p+36)=1;r=1;}
+    }
+    /* Native input never changes the host's Caps/Num/Scroll Lock state. */
+    else if (!strcmp(n,"keybd_event"))r=0;
+    else if (!strcmp(n,"SetErrorMode")){static uint32_t mode;r=mode;mode=A(c,0);}
     else if (!strcmp(n,"GetClientRect")||!strcmp(n,"GetWindowRect")){
         /* The game's real resolution: the cursor mapping follows it (see
          * metal_game_size). */

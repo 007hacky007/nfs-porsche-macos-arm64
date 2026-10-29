@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Compare lifted codec math with original x86 instructions, for this image only."""
 import struct
+import sys
 from pathlib import Path
 import pefile
 from unicorn import Uc,UC_ARCH_X86,UC_MODE_32
 from unicorn.x86_const import UC_X86_REG_ESP,UC_X86_REG_FPCW,UC_X86_REG_EIP
 
-p=pefile.PE('local/game/Porsche.exe')
+game=Path(sys.argv[1] if len(sys.argv)>1 else 'local/game-patched')
+p=pefile.PE(str(game/'Porsche.exe'))
 u=Uc(UC_ARCH_X86,UC_MODE_32)
-u.mem_map(0x400000,0x300000)
+u.mem_map(0x400000,(p.OPTIONAL_HEADER.SizeOfImage+4095)&~4095)
 u.mem_write(0x400000,p.get_memory_mapped_image())
 u.mem_map(0xc00000,0x20000)
 u.mem_map(0x7f000000,0x10000)
@@ -33,8 +35,8 @@ for v in [0x80808080,0x10801080,0xeb80eb80,0x00800080,0xff80ff80]:
     print(f'{v:08x} -> {struct.unpack("<I",u.mem_read(0xc02020,4))[0]:08x}')
 assert not differences,'native codec initialization differs from original x86'
 u.mem_map(0x2000000,0x100000)
-u.mem_write(0x2080000,Path('local/game/FEData/movies/earts-av.mad').read_bytes())
-movie=Path('local/game/FEData/movies/earts-av.mad').read_bytes()
+u.mem_write(0x2080000,(game/'FEData/movies/earts-av.mad').read_bytes())
+movie=(game/'FEData/movies/earts-av.mad').read_bytes()
 offset=decoded=0
 while offset+24<len(movie) and decoded<12:
     tag=movie[offset:offset+4];length=struct.unpack_from('<I',movie,offset+4)[0]&0xffffff

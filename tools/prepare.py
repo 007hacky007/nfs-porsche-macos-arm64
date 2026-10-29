@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -12,6 +13,45 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from tools.inspect_pe import inspect_pe, require_supported
 import pefile
+import capstone
+
+
+def pointer_seeds(pe):
+    base = pe.OPTIONAL_HEADER.ImageBase
+    ranges = [(base + s.VirtualAddress, base + s.VirtualAddress + s.Misc_VirtualSize)
+              for s in pe.sections if s.Characteristics & 0x20000000]
+    in_text = lambda value: any(lo <= value < hi for lo, hi in ranges)
+    seeds = set()
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+    md.detail = True
+    md.skipdata = True
+    mapped = pe.get_memory_mapped_image()
+    for section in pe.sections:
+        data = section.get_data()
+        for offset in range(0, len(data) - 3, 4):
+            value = struct.unpack_from('<I', data, offset)[0]
+            if in_text(value):
+                seeds.add(value)
+        if section.Characteristics & 0x20000000:
+            for instruction in md.disasm(data, base + section.VirtualAddress):
+                if instruction.id and instruction.mnemonic == 'jmp' and instruction.operands[0].type == capstone.CS_OP_MEM:
+                    operand = instruction.operands[0].mem
+                    if not operand.base and operand.index and operand.scale == 4:
+                        # Watcom/CRT jump tables need not be DWORD-aligned.
+                        offset = operand.disp - base
+                        for _ in range(4096):
+                            if offset < 0 or offset + 4 > len(mapped):
+                                break
+                            target = struct.unpack_from('<I', mapped, offset)[0]
+                            if not in_text(target):
+                                break
+                            seeds.add(target)
+                            offset += 4
+                if instruction.id and instruction.mnemonic in ('mov', 'push', 'lea'):
+                    for op in instruction.operands:
+                        if op.type == capstone.CS_OP_IMM and in_text(op.imm):
+                            seeds.add(op.imm)
+    return seeds
 
 
 def prepare(path):
@@ -25,6 +65,10 @@ def prepare(path):
     (output / 'image.json').write_text(json.dumps(info, indent=2) + '\n')
     (output / 'relocs.txt').write_text(''.join(f'{a:08x}\n' for a in info['relocations']))
     seeds = {info['entry']}
+    if 'native-linked' in require_supported(info):
+        # The supplied patched EXE has its relocation table stripped. Recover
+        # stored function pointers, including the patch's continuation targets.
+        seeds.update(pointer_seeds(pe))
     if hasattr(pe, 'DIRECTORY_ENTRY_TLS'):
         addr = pe.DIRECTORY_ENTRY_TLS.struct.AddressOfCallBacks
         for index in range(128):
@@ -48,6 +92,11 @@ def prepare(path):
         'SystemParametersInfoA':4, 'DirectInputCreateA':4, 'DirectDrawEnumerateA':2,
         '__WSAFDIsSet':2, 'GetFileVersionInfoA':4, 'VerQueryValueA':4,
         'GetFileVersionInfoSizeA':2, '#6':5,
+        '_CItan':0, '_CIatan2':0, 'strrchr':0, 'strchr':0, '_stricmp':0,
+        'GetWindowPlacement':2, 'SetWindowPlacement':2, 'GetWindowRect':2,
+        'MonitorFromWindow':2, 'GetMonitorInfoA':2, 'SetErrorMode':1,
+        'CreateActCtxA':1, 'ReleaseActCtx':1, 'ActivateActCtx':2, 'DeactivateActCtx':2,
+        'GetPrivateProfileIntA':4, 'GetPrivateProfileStringA':6,
     })
     imports = []
     for m in info['imports']:
@@ -76,6 +125,12 @@ extern const uint32_t nfsv_import_count;
                         ('DISPATCH_TEXT_BASE',lo),('DISPATCH_TEXT_SIZE',hi-lo)]:
         header += f'#define {name} 0x{value:x}u\n'
     header += f'#define IMAGE_SHA256 "{info["sha256"]}"\n#endif\n'
+    mapped = pe.get_memory_mapped_image()
+    keyboard = list(re.finditer(rb'\x68....\xe8....\x8b\x54\x24\x28\x8b\x44\x24\x20', mapped))
+    if len(keyboard) != 1:
+        raise ValueError('cannot identify the original keyboard buffer for focus-loss fix')
+    key_buffer = struct.unpack_from('<I', mapped, keyboard[0].start() + 1)[0]
+    header = header.replace('#endif\n', f'#define GAME_KEYBOARD_BUFFER 0x{key_buffer:x}u\n#endif\n')
     (generated / 'image.h').write_text(header)
     source = '#include "image.h"\n'
     source += f'const uint32_t nfsv_section_count = {len(sections)};\n'

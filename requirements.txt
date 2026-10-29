@@ -1,2 +1,4 @@
 capstone>=5.0.6,<6
 pefile>=2023.2.7
+# Build-time patch initialization and codec verification; never linked into the app.
+unicorn==2.1.4

@@ -60,9 +60,12 @@ static int select_texture(uint32_t h){
  if(h<16){if(h==0)rs.texture[0]=rs.texture[1]=0;else if(h<=2)rs.texture[h-1]=0;else return 0;return 1;}
  int i=texture_index(h);if(i<0)return 0;rs.texture[textures[i].stage]=h;return 1;
 }
+static uint32_t primitive_packet(CPU *,uint32_t);
 static uint32_t set_state(CPU *c,uint32_t id,uint32_t v){
  unsigned state=id&0xffff,stage=(id>>16)&7;if(stage>1)stage=1;
  switch(state){
+ case 0:return 0; /* Verok disables default filtering by replacing its state ID with zero. */
+ case 0x6c:return 0; /* Movie notification: the supplied dx7 driver reports unsupported. */
  case 1:return select_texture(v);
  case 2:if(v>2)return 0;rs.cull=v;break;
  case 3:background=v;break;
@@ -109,15 +112,44 @@ static uint32_t set_state(CPU *c,uint32_t id,uint32_t v){
  case 0x194:case 0x195:if(v>9)return 0;if(state==0x194)rs.src_blend=v;else rs.dst_blend=v;break;
  case 0x19a:rs.factor=v;break;
  case 0x1c3:return 1;
+ case 0x1b3:return primitive_packet(c,v);
  default:runtime_fail(c,"unimplemented Thrash state",id);
  }
  if(state<512)states[state][stage]=v;return 1;
 }
-static RenderVertex vertex(uint32_t p,int raw){
- RenderVertex v={0};unsigned stride=states[0x2a][0]?40:32;memcpy(&v,guest_ptr(p,stride),stride);
- if(!states[0x2a][0]){v.u1=v.u;v.v1=v.v;}
+static RenderVertex vertex_stride(uint32_t p,unsigned stride,int raw){
+ RenderVertex v={0};memcpy(&v,guest_ptr(p,stride),stride);
+ if(stride==32){v.u1=v.u;v.v1=v.v;}
  if(!raw){v.z+=depth_bias;if(rs.shade==0)v.diffuse=0xffffffff;if(table_active){int idx=(int)(v.z*255);if(idx<0)idx=0;if(idx>255)idx=255;v.specular=(v.specular&0xffffff)|((uint32_t)fogtable[idx]<<24);}}
  return v;
+}
+static RenderVertex vertex(uint32_t p,int raw){return vertex_stride(p,states[0x2a][0]?40:32,raw);}
+static uint32_t primitive_packet(CPU *c,uint32_t p){
+ guest_ptr(p,24);
+ unsigned type=MR32(p),format=MR32(p+4),vertices=MR16(p+12),count=vertices;
+ uint32_t base=MR32(p+8),indices=MR32(p+16);
+ if(type<1||type>6)return 0;
+ if(format!=0x1c4&&format!=0x2c4)runtime_fail(c,"Thrash primitive vertex format",format);
+ unsigned stride=format==0x2c4?40:32;
+ if(indices&&MR16(p+20))count=MR16(p+20);else indices=0;
+ if(!count)return 1;
+ guest_ptr(base,(uint64_t)vertices*stride);if(indices)guest_ptr(indices,(uint64_t)count*2);
+ /* Validate all indices before submitting any drawing. */
+ for(unsigned i=0;indices&&i<count;i++)if(MR16(indices+i*2)>=vertices)return 0;
+ unsigned primitive_count=type==1?count:type==2?count/2:type==3?count-1:type==4?count/3:count>2?count-2:0;
+ for(unsigned i=0;i<primitive_count;i++){
+  unsigned order[3],n=type==1?1:type<=3?2:3;
+  if(type==1)order[0]=i;
+  else if(type==2){order[0]=i*2;order[1]=i*2+1;}
+  else if(type==3){order[0]=i;order[1]=i+1;}
+  else if(type==4){order[0]=i*3;order[1]=i*3+1;order[2]=i*3+2;}
+  else if(type==5){order[0]=i+(i&1);order[1]=i+1-(i&1);order[2]=i+2;}
+  else{order[0]=0;order[1]=i+1;order[2]=i+2;}
+  RenderVertex v[3];
+  for(unsigned j=0;j<n;j++){unsigned index=indices?MR16(indices+order[j]*2):order[j];v[j]=vertex_stride(base+index*stride,stride,0);}
+  render_draw(v,n,type==1?2:type<=3?1:0,&rs);
+ }
+ return 1;
 }
 static void polygon(const uint32_t *p,unsigned count){
  RenderVertex v[6];static const unsigned order[]={0,1,2,0,2,3};for(unsigned i=0;i<(count==3?3:6);i++)v[i]=vertex(p[order[i]],0);render_draw(v,count==3?3:6,0,&rs);

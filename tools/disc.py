@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Read ISO9660/Joliet from a MODE1/2352 MDF or a 2048-byte ISO.
+"""Read ISO9660/Joliet from BIN/CUE, MODE1/2352 MDF or a 2048-byte ISO.
 
 Usage: python3 tools/disc.py IMAGE NEW_DIRECTORY
 The image is read-only and the destination must not already exist.
 """
 import argparse
 import json
+import re
 import shutil
 import struct
 from pathlib import Path, PurePosixPath
@@ -14,6 +15,24 @@ from typing import NamedTuple
 
 class DiscError(ValueError):
     pass
+
+
+def cue_image(path):
+    """Resolve the supported single-track CUE without guessing a track layout."""
+    lines = [line.strip() for line in path.read_text(encoding='utf-8-sig').splitlines()
+             if line.strip() and not line.lstrip().upper().startswith('REM ')]
+    if len(lines) != 3:
+        raise DiscError('CUE requires one FILE, one MODE1/2352 TRACK and INDEX 01 00:00:00')
+    match = re.fullmatch(r'FILE\s+"([^"\x00]+)"\s+BINARY', lines[0], re.I)
+    if not match or not re.fullmatch(r'TRACK\s+01\s+MODE1/2352', lines[1], re.I) or not re.fullmatch(r'INDEX\s+01\s+00:00:00', lines[2], re.I):
+        raise DiscError('unsupported CUE layout; expected one MODE1/2352 track at 00:00:00')
+    name = match[1]
+    if name in ('.', '..') or any(c in name for c in '/\\:') or any(ord(c) < 32 for c in name):
+        raise DiscError('CUE BIN must be a filename beside the CUE')
+    image = path.parent / name
+    if image.is_symlink() or not image.is_file():
+        raise DiscError('CUE BIN must be a regular file beside the CUE')
+    return image
 
 
 class Entry(NamedTuple):
@@ -25,6 +44,9 @@ class Entry(NamedTuple):
 class Disc:
     def __init__(self, path):
         self.path = Path(path)
+        is_cue = self.path.suffix.lower() == '.cue'
+        if is_cue:
+            self.path = cue_image(self.path)
         self.file = self.path.open('rb')
         try:
             size = self.path.stat().st_size
@@ -34,6 +56,8 @@ class Disc:
                 self.stride, self.offset = 2352, 16
             else:
                 self.stride, self.offset = 2048, 0
+            if is_cue and self.stride != 2352:
+                raise DiscError('CUE declares MODE1/2352 but BIN is not raw MODE1 data')
             if size % self.stride:
                 raise DiscError(f'truncated image: {size} bytes, sector size {self.stride}')
             self.sectors = size // self.stride

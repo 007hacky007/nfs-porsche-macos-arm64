@@ -54,6 +54,36 @@ class DiscTests(unittest.TestCase):
         p.write_bytes(data)
         return Disc(p)
 
+    def cue(self, text='FILE "disc.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n'):
+        (self.root / 'disc.bin').write_bytes(image())
+        path = self.root / 'disc.cue'
+        path.write_text(text)
+        return path
+
+    def test_cue_extracts_its_named_bin(self):
+        with Disc(self.cue()) as disc:
+            disc.extract(self.root / 'game')
+        self.assertEqual((self.root / 'game/Simulation/cop356_german.crp').read_bytes(), b'asset')
+
+    def test_cue_refuses_a_cooked_iso_declared_as_raw_bin(self):
+        cue = self.cue()
+        (self.root / 'disc.bin').write_bytes(image(raw=False))
+        with self.assertRaisesRegex(DiscError, 'not raw MODE1'):
+            Disc(cue)
+
+    def test_cue_rejects_unsafe_file_reference(self):
+        for name in ('../disc.bin', '/tmp/disc.bin', 'C:\\disc.bin'):
+            with self.subTest(name=name), self.assertRaises(DiscError):
+                Disc(self.cue(f'FILE "{name}" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n'))
+
+    def test_cue_rejects_unsupported_layout(self):
+        for text in ('FILE "disc.bin" BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00',
+                     'FILE "disc.bin" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:01',
+                     'FILE "disc.bin" BINARY\nTRACK 01 MODE1/2352',
+                     'FILE "disc.bin" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\nTRACK 02 AUDIO'):
+            with self.subTest(text=text), self.assertRaises(DiscError):
+                Disc(self.cue(text))
+
     def test_joliet_preserves_long_names_and_file_contents(self):
         with self.open_image(image()) as disc:
             self.assertEqual([str(e.path) for e in disc.entries()],

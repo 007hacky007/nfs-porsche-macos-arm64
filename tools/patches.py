@@ -19,8 +19,10 @@ import pefile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.disc import Disc
+from tools.game_source import copy_game, verify_game
 
 COMBINED_SHA = 'bb69d935b49dfe7ab71e22608102d01b985a4ca41c9e8559e765ed2d0149d5a2'
+COMBINED_MIRROR_SHA = 'cc3087b5f8914dd47ab4e2b54da2e68c4caa03ab4871c11183a4720eba193d66'
 SILENT_SHA = '6c3b181301f3b6e646f4f42ad8e89f74dd3fea95cc028d055c56ddab7e0fd1b8'
 EXE_SHA = 'c318af393d4c2b7071a820ca3d69e956bbd94769b6e5c2e3e49f498ecbc94906'
 DLL_SHA = 'f24b5c82404f403645e5bc3e52d47e4dd6d19bd92613c243ac31bea285fce758'
@@ -35,7 +37,8 @@ def sha(data):
 
 
 def verified_archive(path, expected):
-    if sha(Path(path).read_bytes()) != expected:
+    accepted = {expected} if isinstance(expected, str) else set(expected)
+    if sha(Path(path).read_bytes()) not in accepted:
         raise ValueError(f'unsupported patch archive: {Path(path).name}')
     return ZipFile(path)
 
@@ -234,15 +237,31 @@ def link_patch(exe_data, dll_data):
                            'exe_sha256': EXE_SHA, 'dll_sha256': DLL_SHA, 'sha256': sha(result)}
 
 
+def overlay_path(root, relative):
+    """Use Windows path matching even on a case-sensitive build volume."""
+    target = Path(root)
+    for part in relative.parts:
+        matches = [p for p in target.iterdir() if p.name.casefold() == part.casefold()] if target.is_dir() else []
+        if len(matches) > 1:
+            raise ValueError(f'ambiguous patch destination: {relative}')
+        target = matches[0] if matches else target / part
+    return target
+
+
 def prepare_game(disc, combined, silent, destination):
     destination = Path(destination)
     if destination.exists() or destination.is_symlink():
         raise FileExistsError('game destination already exists')
-    with verified_archive(combined, COMBINED_SHA) as patch, verified_archive(silent, SILENT_SHA):
+    with verified_archive(combined, (COMBINED_SHA, COMBINED_MIRROR_SHA)) as patch, verified_archive(silent, SILENT_SHA):
         # Verify and link before extracting or writing any destination files.
         linked, report = link_patch(patch.read('Copy/nfs5.exe'), patch.read('Copy/nfs5.dll'))
-        with Disc(disc) as source:
-            entries = source.extract(destination)
+        if Path(disc).is_dir():
+            source = verify_game(disc)
+            copy_game(source, destination)
+            source_files = len(source.files)
+        else:
+            with Disc(disc) as source:
+                source_files = len(source.extract(destination))
         try:
             applied = []
             for entry in patch.infolist():
@@ -255,18 +274,23 @@ def prepare_game(disc, combined, silent, destination):
                 # Native Metal and Cocoa replace the Windows wrappers/configurator.
                 if parts[0] not in ('FEData', 'GameData', 'SaveData') and str(path) not in ('Copy/version.txt', 'Copy/Drivers/dx7/thrash.ini'):
                     continue
-                target = destination.joinpath(*parts)
+                target = overlay_path(destination, PurePosixPath(*parts))
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(patch.read(entry))
                 applied.append(str(PurePosixPath(*parts)))
             (destination / 'Porsche.exe').write_bytes(linked)
             # Reference originals and all upstream notices stay local beside the assets.
-            sources = destination / 'PatchSources'
-            sources.mkdir()
-            shutil.copy2(combined, sources / Path(combined).name)
-            shutil.copy2(silent, sources / Path(silent).name)
-            report.update({'combined_sha256': COMBINED_SHA, 'silent_sha256': SILENT_SHA,
-                           'disc_files': len(entries), 'applied': applied})
+            # Upstream documentation stays beside the privately prepared files;
+            # the complete archives stay in the external download cache.
+            notices = destination / 'PatchNotices'
+            notices.mkdir()
+            for entry in patch.infolist():
+                if not entry.is_dir() and (entry.filename.startswith('Docs/') or entry.filename == 'Readme.txt'):
+                    (notices / PurePosixPath(entry.filename).name).write_bytes(patch.read(entry))
+            with ZipFile(silent) as upstream:
+                (notices / 'SilentPatch-ReadMe.txt').write_bytes(upstream.read('ReadMe.txt'))
+            report.update({'combined_sha256': sha(Path(combined).read_bytes()), 'silent_sha256': SILENT_SHA,
+                           'source_files': source_files, 'applied': applied})
             (destination / 'patch-manifest.json').write_text(json.dumps(report, indent=2) + '\n')
         except BaseException:
             shutil.rmtree(destination)

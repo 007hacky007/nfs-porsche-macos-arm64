@@ -28,6 +28,21 @@ class PatchTests(unittest.TestCase):
         struct.pack_into('<II', data, 521, 0x402000, 0x401000)
         self.assertIn(0x402000, pointer_seeds(pefile.PE(data=bytes(data))))
 
+    def test_overlay_resolves_existing_directory_and_filename_casing(self):
+        from pathlib import PurePosixPath
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original = root / 'FEData/data/NFS5.CAR'
+            original.parent.mkdir(parents=True)
+            original.write_bytes(b'original')
+            target = patches.overlay_path(root, PurePosixPath('FEData/Data/nfs5.car'))
+            self.assertEqual(target, original)
+            target.write_bytes(b'patched')
+            self.assertEqual(original.read_bytes(), b'patched')
+            self.assertEqual(list((root / 'FEData').iterdir()), [original.parent])
+            self.assertEqual(patches.overlay_path(root, PurePosixPath('fedata/DATA/new.car')),
+                             original.parent / 'new.car')
+
     def test_rejects_unknown_archive_before_creating_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -47,6 +62,22 @@ class PatchTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 patches.prepare_game(root, root, root, game)
             self.assertEqual((game / 'profile.sav').read_bytes(), b'keep')
+
+    @unittest.skipUnless((BACKUP / 'patches/NFS5-Combined-Patch-v1.1.zip').exists(), 'local patch archives absent')
+    def test_prepares_a_verified_folder_without_copying_private_saves(self):
+        from test_game_source import GameSourceTests
+        fixture = GameSourceTests(methodName='test_refuses_existing_destination')
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.allow_fixture()
+        (fixture.game / 'SaveData').mkdir()
+        (fixture.game / 'SaveData/private.sav').write_bytes(b'private save')
+        result = fixture.root / 'prepared'
+        patches.prepare_game(fixture.game, BACKUP / 'patches/NFS5-Combined-Patch-v1.1.zip',
+                             BACKUP / 'patches/SilentPatchNFS90s.zip', result)
+        self.assertFalse((result / 'SaveData/private.sav').exists())
+        self.assertEqual((fixture.game / 'SaveData/private.sav').read_bytes(), b'private save')
+        self.assertTrue((result / 'GameData/CarModel/959.crp').is_file())
 
     @unittest.skipUnless((BACKUP / 'patches/NFS5-Combined-Patch-v1.1.zip').exists(), 'local patch archives absent')
     def test_installs_native_thrash_descriptor_with_patched_assets(self):

@@ -21,7 +21,8 @@ static void alert(NSString *message){
 int main(void){@autoreleasepool{
     [NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     NSUserDefaults *settings=NSUserDefaults.standardUserDefaults;
-    NSString *saved=[settings stringForKey:@"GameFolder"];NSURL *folder=saved?[NSURL fileURLWithPath:saved isDirectory:YES]:nil;
+    NSURL *folder=[NSBundle.mainBundle URLForResource:@"Game" withExtension:nil];
+    if(!folder){NSString *saved=[settings stringForKey:@"GameFolder"];folder=saved?[NSURL fileURLWithPath:saved isDirectory:YES]:nil;}
     if(!folder||validate(folder)){
         for(;;){
             NSOpenPanel *panel=NSOpenPanel.openPanel;panel.title=@"NFSV";panel.message=@"Choose your extracted NFSV game folder.";

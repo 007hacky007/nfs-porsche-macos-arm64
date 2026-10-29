@@ -1,10 +1,10 @@
 # Supplied patch coverage
 
-The default preparation uses the USA BIN/CUE disc and both archives in `game_backup2/patches`. Backups and extracted game files remain external to the repository and app. Original upstream archives, including their documentation and notices, are preserved in the prepared folder's `PatchSources` directory.
+Run `./build.sh` with your own supported game folder or disc image. The builder verifies your files and fetches pinned patch versions. Archives stay in the external download cache; extracted files and generated game code stay in ignored build directories. Upstream notices are retained in `PatchNotices` with the privately prepared files and bundled app.
 
 ## Combined Patch v1.1
 
-Archive SHA-256: `bb69d935b49dfe7ab71e22608102d01b985a4ca41c9e8559e765ed2d0149d5a2`.
+The automatic builder uses the pinned, checksum-verified community mirror authorized for this project, because the original author download is unavailable. Mirror archive SHA-256: `cc3087b5f8914dd47ab4e2b54da2e68c4caa03ab4871c11183a4720eba193d66`. The previously inspected archive `bb69d935b49dfe7ab71e22608102d01b985a4ca41c9e8559e765ed2d0149d5a2` remains accepted by the internal preparation tool. All 147 original archive members match; the mirror's additional `Copy/fe_out.txt` is ignored.
 
 | Component | Native integration |
 | --- | --- |

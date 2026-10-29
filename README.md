@@ -1,64 +1,100 @@
-# NFSV native Metal port
+# NFSV for Apple Silicon
 
-Local Apple Silicon port of the original Windows NFS Porsche Unleashed game code. The executable is statically lifted to C and compiled to ARM64. Metal, Cocoa and CoreAudio provide the native platform services. The game does not run under Wine or Rosetta.
+Build your own macOS version of **Need for Speed: Porsche Unleashed** with native ARM64 code, Metal graphics and CoreAudio sound.
 
-The original menus, garage, movies, audio and a playable race have been exercised. Evolution and Factory Driver progression still need verification. This is a work in progress.
+**This repository contains no EA game code, game executable, translated game functions or game assets. You must supply your own PC game copy.** The build script checks your files, downloads the required patches and translates the game locally. Downloaded patches, extracted files, generated code and finished apps are not tracked in git.
 
-## Play
+## What you need
 
-Open `out/NFSV.app` and choose the extracted game folder, currently `local/game-patched`. Game assets remain outside the app.
+- An Apple Silicon Mac, macOS 11 or newer.
+- Xcode command line tools. Install them once with `xcode-select --install`.
+- An ARM64 installation of Python 3.10 or newer, available as `python3`.
+- Internet access for the first build's Python dependencies and patches.
+- Your own supported English USA PC copy of the game, as a folder, ISO or BIN/CUE image.
 
-- Fullscreen is enabled on startup. Use Control-Command-F, F11 or the green window button to toggle it.
-- Choose the race resolution in **Options > Graphics > Screen size**. The renderer exposes HD, 1440p and 4K modes in 16 and 32 bit color, plus the original modes.
-- The Mac cursor is invisible inside the game view. The original game draws its own pointer. AppKit restores the Mac cursor outside the game.
-- Menus and original movies retain their original resolution and aspect ratio. Increasing the race resolution does not replace their source artwork.
+Supported game data: **USA v3.2 or v3.4, unmodified**. A folder must contain `GameData`, `FEData`, `fe.txt`, `install.txt` and `Porsche.exe`. The original USA v3.2/v3.4 disc executables are accepted, as is the supported USA v3.5 executable over those same verified data files. Localized releases, console versions, incomplete folders and modified asset sets are rejected.
 
-The app stores saves and its log in `~/Library/Application Support/NFSV`. Development sessions use the directory selected by `NFSV_SAVE_DIR`; these save directories are separate. Do not overwrite one with another without keeping a backup.
+The script prepares the v3.5-based executable from Combined Patch v1.1 automatically. Do not install patches or find a replacement executable yourself.
 
 ## Build
 
-Requires an Apple Silicon Mac, macOS 11 or newer, Xcode command line tools and Python 3. The default input is the USA BIN/CUE disc in `game_backup2`, with Combined Patch v1.1 and SilentPatch Build 1 from `game_backup2/patches`.
-
-Prepare a new asset folder, then compile and package:
+In Terminal, enter the repository folder:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python tools/patches.py \
-  "game_backup2/Need for Speed - Porsche Unleashed (USA).cue" \
-  game_backup2/patches local/game-patched
-.venv/bin/python tools/prepare.py local/game-patched/Porsche.exe
-.venv/bin/python build.py
-.venv/bin/python pack.py
+cd /path/to/NFSV
 ```
 
-Preparation validates the exact patch archives, extracts the CUE's BIN data track and applies the Combined Patch assets. Verok's executable and DLL are linked with their instruction changes resolved before static translation. Unicorn runs only the patch initialization during preparation; the finished app is ARM64 and does not contain it. Some restrictive sandboxes block this build-time interpreter's executable memory.
-
-The output directory must not already exist. Original backups, previous asset folders and existing save overlays remain unchanged. The patch's sample profile and HUD defaults are used only when no saved file already overrides them. The generated `patch-manifest.json` records hashes and installed files. Upstream patch archives and notices are retained locally in `PatchSources`.
-
-The app validates the prepared executable against its build. After upgrading, select `local/game-patched` if the launcher asks for a game folder. The old v3.5 USA image remains supported when explicitly rebuilding for it; an app and game folder must use the same image.
-
-For extraction without patches:
+Then run **one** of these commands:
 
 ```sh
-.venv/bin/python tools/disc.py "game_backup2/Need for Speed - Porsche Unleashed (USA).cue" local/disc-bin
+./build.sh "/path/to/your/game-folder"
+./build.sh "/path/to/your/game.iso"
+./build.sh "/path/to/your/game.cue"
+./build.sh "/path/to/your/game.bin"
 ```
 
-The reader supports the supplied single-track MODE1/2352 BIN/CUE, raw MODE1 images and 2048-byte ISOs. It rejects unsupported CUE layouts. Game assets, binaries, backups and local manifests are ignored by git. Imported compiler/runtime notices are in `third_party`. See [patch coverage](docs/patches.md) for what runs natively and which Windows components are replaced.
+For BIN/CUE, keep the BIN beside the CUE with the filename recorded in it. Use the CUE when available. The supported layout is one MODE1/2352 data track at `00:00:00`; audio and multi-track layouts are rejected. ISO images may contain 2048-byte logical sectors or raw MODE1/2352 sectors. Images with Joliet names preserve the game's long filenames.
 
-## Development checks
+The script sets up `.venv`, extracts images, verifies all game-data and executable checksums, downloads and verifies patches, translates the supported code, compiles it and signs the app locally. Your input copy and existing saves are never modified. Later builds reuse verified downloads and prepared files.
 
-```sh
-.venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python tools/check_native.py
-```
+When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications; it contains a private copy of the prepared files and needs no separate game-folder selection. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
 
-Native checks need access to Metal and local UDP sockets; a restrictive application sandbox can deny these independently of game correctness. The build-time Unicorn dependency also serves as an x86 codec oracle. It is never linked into the game.
+If a checksum fails, use a complete, unmodified supported copy. Renaming an unsupported executable or changing a version string will not make it compatible. `./build.sh --help` shows the accepted inputs.
 
-For an interactive development run without a time limit:
+## Features
 
-```sh
-NFSV_SAVE_DIR=out/saves NFSV_TIMEOUT=0 out/nfsv local/game-patched/Porsche.exe
-```
+- Original game code for menus, garage, Quick Race, Evolution and Factory Driver.
+- Native Metal rendering, including textures, depth, fog and the patched primitive-drawing path.
+- HD, 1440p and 4K race resolutions in 16 and 32 bit color.
+- Fullscreen on startup; Control-Command-F, F11 or the green window button toggles it.
+- Original in-game pointer, with the Mac cursor hidden inside the game view.
+- Keyboard/mouse input and Command-V or Control-V text paste.
+- Original sound effects, music, movies and movie audio through CoreAudio and Metal.
+- Switching apps releases held controls and keeps display/audio active without restarting the song.
+- Separate writable saves; the bundled game files remain unchanged.
 
-Use `NFSV_FULLSCREEN=0` to start windowed. Automatic screenshots are off by default; `NFSV_CAPTURE=120` requests one every 120 presentations for diagnosis. PNG encoding runs in the background, but reading a large framebuffer still has a cost. Leave capture disabled for performance testing. An optional `NFSV_CONTROL` FIFO accepts game-only test inputs through `tools/control.py`; do not use it while someone is playing.
+Menus and movies retain their source artwork and aspect ratio. Higher race resolutions do not add detail to that artwork. Menus, driving, sound and intro playback have been exercised; complete career progression, every patched car/track and long sessions still need play testing. Native gamepad support and internet multiplayer are not established by this port.
+
+## Saves and build files
+
+Saves and the game log live in `~/Library/Application Support/NFSV`. Rebuilding or replacing the app does not replace that directory. Existing careers keep their progress; fixes encoded in the patch's sample profile require a new profile.
+
+The script keeps Python dependencies in `.venv`, extracted/prepared game files in `local/builds`, and generated C, objects and app output in `gen` and `out`. These paths are ignored by git. Patch archives stay outside the repository, in `~/Library/Caches/NFSV/patches`. Every cached download is checked before use. Upstream patch notices are retained with the prepared files and in the app.
+
+## Patches used
+
+| Patch | Version and source | Use in this port |
+| --- | --- | --- |
+| NFS Porsche Unleashed Combined Patch | **v1.1** by Tsalikon / A Future Pilot. [Original announcement](https://www.nfsaddons.com/forums/index.php?topic=2032.0); the author's download is unavailable. The script uses a [pinned community mirror](https://github.com/legluondunet/MyLittleLutrisScripts/tree/2544370ac45b736a6ba8dc0dbb26e31c4c7f23b2/Need%20for%20Speed%20-%20Porsche%20Unleashed), verified by SHA-256. | v3.5-based game and Verok patch code, NFS5 Essentials fixes, four official extra cars, database/model/HUD fixes and Smooth Shines and Lights. |
+| SilentPatchNFS90s | **Build 1**, from the [author's release](https://github.com/CookiePLMonster/SilentPatchNFS90s/releases/tag/BUILD-1). | Applicable NFS Porsche behavior is implemented in the native input, threading and graphics services. The Windows ASI and proxy DLL do not run. |
+
+The mirror's 147 original archive members match the supported Combined Patch; its extra log file is not installed. Its accepted archive SHA-256 is `cc3087b5f8914dd47ab4e2b54da2e68c4caa03ab4871c11183a4720eba193d66`. SilentPatch Build 1 is `6c3b181301f3b6e646f4f42ad8e89f74dd3fea95cc028d055c56ddab7e0fd1b8`.
+
+Windows DirectX/Glide/OpenGL wrappers and the Windows configurator are replaced by native services. Preparation selects English, movies, fog and filtering enabled, automatic CPU calculation and the patch's default car-control setting. The older Enhanced Patch document bundled with Combined Patch describes additional gameplay enhancements that this package does not include. See [patch coverage](docs/patches.md).
+
+## How native is it?
+
+The build reads the verified 32-bit x86 executable from your locally prepared copy, discovers its functions and statically translates their instructions to C. Apple Clang then compiles that generated C to ARM64 machine code. The generated source contains code derived from your game copy; it exists only in ignored build directories and is never part of the repository.
+
+The original game's logic, menus, physics, AI, modes and movie decoder run as compiled ARM64 functions. This is not an engine recreation. Windows imports are handled by native compatibility code for files, memory, threads and input. The original Thrash graphics interface is implemented with Metal; Cocoa provides windows and CoreAudio provides audio. The finished app does not use Wine, Rosetta or a runtime x86 interpreter.
+
+It still preserves the original 32-bit address space, x86 register/flag state, x87/SSE semantics and indirect-call dispatch in its generated code. That adds overhead compared with a port written from the original C/C++ source. ARM64 uses 64-bit floating-point intermediates where x86 could use 80-bit x87 values, so exact numerical equivalence is not guaranteed in every path.
+
+Before translation, Unicorn runs only the verified patch's initialization at build time to resolve its instruction changes. Unicorn and Python are not bundled in the app. The resulting patched executable is checked against the supported linked SHA-256 `13273410b8951e3785a5def780667d6101b1f72e8ac8fd9561f13b3cf724267b`.
+
+Game-data checksums use a canonical sorted list of case-insensitive relative paths and each file's SHA-256 across `GameData`, `FEData`, `fe.txt` and `install.txt`, ignoring OS/source-control metadata. Supported aggregate hashes are:
+
+| Data version | Aggregate SHA-256 |
+| --- | --- |
+| USA v3.2 | `e5b118ac8e7910049f7fc9bde3274b44f7eb5911e30efece7e3b33d68ea20747` |
+| USA v3.4 | `57f3f4d1405e7b41b2581c47558ef4aa8b31e3d8c29fb1038334a0d34a30a1b8` |
+
+Supported source executable SHA-256 values are:
+
+| Source executable | SHA-256 |
+| --- | --- |
+| USA v3.2 disc loader | `6c862baecb74ad15be61fe54dd4ee0e4401719d369c74432dbfe9381c1812f11` |
+| USA v3.4 disc loader | `4b7bc7fc134f3e6145b9ad5dea1938085e9562344a088279d216f08a1543e9d8` |
+| Supported USA v3.5 executable | `02437ddbf41af86dffe14251b28ed8889bd1c4c904fe77ff730d8912257ec90d` |
+
+Compiler/runtime support code has its own third-party notices and restrictions in [third_party](third_party). Building a private app does not add permission to redistribute the game's code or assets.

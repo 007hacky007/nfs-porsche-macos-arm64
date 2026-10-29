@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and run native regression tests after build.py has compiled the runtime."""
+"""Build and run native regression tests after ./build.sh has compiled the runtime."""
 from pathlib import Path
 import os
 import subprocess

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile generated game C and the native runtime. Run prepare.py first."""
+"""Internal ARM64 compiler step. Use ./build.sh to build the app."""
 import concurrent.futures
 import hashlib
 import json
@@ -7,7 +7,7 @@ import os
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 OUT = ROOT / 'out/obj'
 OUT.mkdir(parents=True, exist_ok=True)

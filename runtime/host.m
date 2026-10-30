@@ -14,20 +14,6 @@ static unsigned width=640,height=480;
 static _Atomic long frame_count;
 static _Atomic int closing;
 
-static NSCursor *game_cursor(void){
-    const char *hide=getenv("NFSV_HIDE_CURSOR");
-    if(hide&&!strcmp(hide,"0"))return NSCursor.arrowCursor;
-    static NSCursor *invisible;
-    if(!invisible){
-        NSBitmapImageRep *pixels=[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:16 pixelsHigh:16
-            bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:64 bitsPerPixel:32];
-        memset(pixels.bitmapData,0,pixels.bytesPerRow*pixels.pixelsHigh);
-        NSImage *image=[[NSImage alloc] initWithSize:NSMakeSize(16,16)];[image addRepresentation:pixels];
-        invisible=[[NSCursor alloc] initWithImage:image hotSpot:NSZeroPoint];
-    }
-    return invisible;
-}
-
 void *host_metal_device(void){if(!device)device=MTLCreateSystemDefaultDevice();return (__bridge void *)device;}
 void *host_metal_queue(void){if(!queue){host_metal_device();queue=[device newCommandQueue];}return (__bridge void *)queue;}
 void *host_metal_layer(void){return (__bridge void *)layer;}
@@ -68,8 +54,6 @@ static Key key(unsigned code){
 @end
 @implementation NFSVView
 - (BOOL)acceptsFirstResponder{return YES;}
-- (void)resetCursorRects{[self addCursorRect:self.bounds cursor:game_cursor()];}
-- (void)cursorUpdate:(NSEvent *)event{(void)event;[game_cursor() set];}
 - (BOOL)performKeyEquivalent:(NSEvent *)event{
     if(event.keyCode==9&&(event.modifierFlags&NSEventModifierFlagCommand)){[self paste:nil];return YES;}
     return [super performKeyEquivalent:event];
@@ -109,7 +93,7 @@ static Key key(unsigned code){
 - (void)updateTrackingAreas{
     for(NSTrackingArea *area in self.trackingAreas.copy)[self removeTrackingArea:area];
     [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:self.bounds
-        options:NSTrackingMouseMoved|NSTrackingCursorUpdate|NSTrackingActiveInKeyWindow|NSTrackingInVisibleRect owner:self userInfo:nil]];
+        options:NSTrackingMouseMoved|NSTrackingActiveInKeyWindow|NSTrackingInVisibleRect owner:self userInfo:nil]];
     [super updateTrackingAreas];
 }
 - (void)mouse:(NSEvent *)event button:(int)button down:(int)down wheel:(int)wheel{
@@ -131,6 +115,8 @@ static Key key(unsigned code){
 
 @interface NFSVContentView : NSView
 @property(nonatomic,strong) NFSVView *gameView;
+@property(nonatomic) BOOL cursorHidden;
+- (void)updateCursorVisibility;
 @end
 @implementation NFSVContentView
 - (instancetype)initWithFrame:(NSRect)frame{
@@ -144,20 +130,43 @@ static Key key(unsigned code){
     [super layout];
     DisplayRect r=display_fit(width,height,self.bounds.size.width,self.bounds.size.height);
     self.gameView.frame=NSMakeRect(r.x,r.y,r.w,r.h);
+    [self updateCursorVisibility];
 }
-- (void)resetCursorRects{
-    /* AppKit restores the normal cursor outside this view or when it loses focus. */
-    [self addCursorRect:self.bounds cursor:game_cursor()];
+- (void)setCursorHidden:(BOOL)hidden{
+    if(_cursorHidden==hidden)return;
+    _cursorHidden=hidden;
+    /* Hide state survives cursor-image changes, and each hide owns exactly one unhide. */
+    if(hidden)[NSCursor hide];else [NSCursor unhide];
 }
+- (void)updateCursorVisibility{
+    const char *hide=getenv("NFSV_HIDE_CURSOR");
+    NSPoint point=[self convertPoint:self.window.mouseLocationOutsideOfEventStream fromView:nil];
+    self.cursorHidden=self.window.isKeyWindow&&(!hide||strcmp(hide,"0"))&&NSPointInRect(point,self.bounds);
+}
+- (void)resetCursorRects{[self updateCursorVisibility];}
+- (void)mouseEntered:(NSEvent *)event{(void)event;[self updateCursorVisibility];}
+- (void)mouseExited:(NSEvent *)event{(void)event;[self updateCursorVisibility];}
+- (void)updateTrackingAreas{
+    for(NSTrackingArea *area in self.trackingAreas.copy)[self removeTrackingArea:area];
+    [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:self.bounds
+        options:NSTrackingMouseEnteredAndExited|NSTrackingActiveInKeyWindow|NSTrackingInVisibleRect owner:self userInfo:nil]];
+    [super updateTrackingAreas];[self updateCursorVisibility];
+}
+- (void)viewWillMoveToWindow:(NSWindow *)newWindow{
+    if(newWindow!=self.window)self.cursorHidden=NO;
+    [super viewWillMoveToWindow:newWindow];
+}
+- (void)viewDidMoveToWindow{[super viewDidMoveToWindow];[self updateCursorVisibility];}
+- (void)dealloc{if(_cursorHidden)[NSCursor unhide];}
 @end
 
 @interface NFSVWindow : NSWindow <NSWindowDelegate>
 @end
 @implementation NFSVWindow
 - (BOOL)canBecomeKeyWindow { return YES; }
-- (void)windowDidBecomeKey:(NSNotification *)notification{(void)notification;input_focus(1);}
-- (void)windowDidResignKey:(NSNotification *)notification{(void)notification;input_focus(0);}
-- (BOOL)windowShouldClose:(NSWindow *)sender { (void)sender; atomic_store(&closing,1); return NO; }
+- (void)windowDidBecomeKey:(NSNotification *)notification{(void)notification;input_focus(1);[(NFSVContentView *)self.contentView updateCursorVisibility];}
+- (void)windowDidResignKey:(NSNotification *)notification{(void)notification;input_focus(0);[(NFSVContentView *)self.contentView setCursorHidden:NO];}
+- (BOOL)windowShouldClose:(NSWindow *)sender { (void)sender; [(NFSVContentView *)self.contentView setCursorHidden:NO]; atomic_store(&closing,1); return NO; }
 @end
 
 static void fit_window(unsigned w,unsigned h){

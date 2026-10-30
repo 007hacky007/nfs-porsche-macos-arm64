@@ -1,5 +1,6 @@
 #include "hud.h"
 #include <math.h>
+#include <stdlib.h>
 
 static float scale=1,offset_x,offset_y;
 static unsigned drawing;
@@ -17,7 +18,10 @@ void hud_anchor(CPU *cpu,guest_fn_t original){
 
 void hud_initialize(CPU *cpu,guest_fn_t original){
     uint32_t args=cpu->esp,width=MR32(args+12),height=MR32(args+16);
-    scale=fminf(width/640.f,height/480.f);if(scale<1)scale=1;
+    const char *setting=getenv("NFSV_HUD_SCALE");char *end;
+    long percent=setting?strtol(setting,&end,10):100;
+    if(setting&&(*setting<'0'||*setting>'9'||*end||percent<25||percent>100))percent=100;
+    scale=fminf(width/640.f,height/480.f)*percent/100.f;if(scale<1)scale=1;
     unsigned virtual_width=(unsigned)lroundf(width/scale),virtual_height=(unsigned)lroundf(height/scale);
     offset_x=(width-virtual_width*scale)*.5f;offset_y=(height-virtual_height*scale)*.5f;
     /* The original layout anchors fixed-size widgets in this coordinate space. */

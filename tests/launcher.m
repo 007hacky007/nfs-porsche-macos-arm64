@@ -7,20 +7,29 @@ int main(void){@autoreleasepool{
     [NSApplication sharedApplication];
     NSString *domain=[@"org.nfsv.launcher-test." stringByAppendingString:NSUUID.UUID.UUIDString];
     NSUserDefaults *defaults=[[NSUserDefaults alloc] initWithSuiteName:domain];
-    NSDictionary *env=launcher_environment(defaults,@{@"KEEP":@"yes",@"NFSV_RESOLUTION":@"bad",@"NFSV_FPS_LIMIT":@"999"});
+    NSDictionary *env=launcher_environment(defaults,@{@"KEEP":@"yes",@"NFSV_RESOLUTION":@"bad",@"NFSV_FPS_LIMIT":@"999",@"NFSV_HUD_SCALE":@"bad"});
+    CHECK([env[@"NFSV_HUD_SCALE"] isEqual:@"100"]);
     CHECK([env[@"KEEP"] isEqual:@"yes"]&&[env[@"NFSV_FULLSCREEN"] isEqual:@"1"]&&[env[@"NFSV_HIDE_CURSOR"] isEqual:@"1"]);
     CHECK(!env[@"NFSV_RESOLUTION"]&&!env[@"NFSV_FPS_LIMIT"]);
     NFSVLaunchSettingsView *view=[[NFSVLaunchSettingsView alloc] initWithDefaults:defaults];
     CHECK(![defaults objectForKey:@"LaunchResolution"]); // Opening or cancelling does not save edits.
     [view.resolution selectItemAtIndex:6];[view.frameLimit selectItemAtIndex:2];
+    CHECK(view.hudScale.doubleValue==100&&view.hudScale.minValue==25&&view.hudScale.maxValue==100);
+    view.hudScale.doubleValue=75;
     view.fullscreen.state=NSControlStateValueOff;view.hideCursor.state=NSControlStateValueOn;
     [view saveToDefaults:defaults];
     env=launcher_environment(defaults,@{});
     CHECK([env[@"NFSV_RESOLUTION"] isEqual:@"1920x1080"]&&[env[@"NFSV_FPS_LIMIT"] isEqual:@"60"]);
     CHECK([env[@"NFSV_FULLSCREEN"] isEqual:@"0"]&&[env[@"NFSV_HIDE_CURSOR"] isEqual:@"1"]);
+    CHECK([env[@"NFSV_HUD_SCALE"] isEqual:@"75"]);
     view=[[NFSVLaunchSettingsView alloc] initWithDefaults:defaults];
     CHECK([view.resolution.selectedItem.representedObject isEqual:@"1920x1080"]);
     CHECK([view.frameLimit.selectedItem.representedObject isEqual:@60]&&view.fullscreen.state==NSControlStateValueOff);
+    CHECK(view.hudScale.doubleValue==75);
+    for(id invalid in @[@24,@101,@"75",@(NAN),@(INFINITY)]){
+        [defaults setObject:invalid forKey:@"LaunchHUDScale"];
+        CHECK([launcher_environment(defaults,@{})[@"NFSV_HUD_SCALE"] isEqual:@"100"]);
+    }
     [defaults setObject:@"9999x9999" forKey:@"LaunchResolution"];
     [defaults setObject:@(-12) forKey:@"LaunchFrameLimit"];
     [defaults setObject:@"invalid" forKey:@"LaunchHideCursor"];

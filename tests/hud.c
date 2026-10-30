@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 static unsigned expected_width,expected_height;
 static float expected_scale,expected_offset;
@@ -83,6 +84,7 @@ static void resolution(unsigned width,unsigned height,unsigned virtual_width,uns
     int clip[]={10,20,110,120};hud_clip(clip);assert(clip[0]==10&&clip[3]==120);
 }
 int main(void){
+    unsetenv("NFSV_HUD_SCALE");
     mem_init();mem_commit(0x10000,0x4000);mem_commit(0x60c000,0x4000);
     anchor(640,512,444,35,476);
     anchor(640,512,100,35,100);
@@ -95,5 +97,14 @@ int main(void){
     resolution(2560,1440,853,480,3);
     resolution(1280,1024,640,512,2);
     resolution(640,480,640,480,1);
+    setenv("NFSV_HUD_SCALE","75",1);resolution(3840,2160,1138,640,3.375f);
+    setenv("NFSV_HUD_SCALE","50",1);resolution(3840,2160,1707,960,2.25f);
+    setenv("NFSV_HUD_SCALE","25",1);resolution(3840,2160,3413,1920,1.125f);
+    resolution(640,480,640,480,1);
+    const char *invalid[]={"","0","24","101","-25","75%","75.5","nan","inf"," 75","75 ","99999999999999999999999999"};
+    for(unsigned i=0;i<sizeof invalid/sizeof *invalid;i++){
+        setenv("NFSV_HUD_SCALE",invalid[i],1);resolution(3840,2160,853,480,4.5f);
+    }
+    unsetenv("NFSV_HUD_SCALE");
     puts("HUD: uniform scaling, edge/center anchors, clipping and guest ABI passed");
 }

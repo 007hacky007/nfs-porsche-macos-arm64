@@ -40,6 +40,7 @@ static void hud_draw_fixture(CPU *cpu){
  cpu->eip=MR32(cpu->esp);cpu->esp+=4;
 }
 int main(void){@autoreleasepool{
+ unsetenv("NFSV_HUD_SCALE");
  CHECK(render_mode(640,480));int clip[]={0,0,640,480};uint32_t p;
  render_clear(0xff00ff00,1,0,clip);CHECK(render_read(100,100,1,1,&p,0)&&p==0xff00ff00);
  RenderState s={.depth_func=7,.brightness=1,.stencil_func=7,.clip={0,0,640,480}};
@@ -78,6 +79,12 @@ int main(void){@autoreleasepool{
  CHECK(render_read(510,510,1,1,&p,0)&&p==0xff00ff00);
  cpu.esp=0x10000;hud_draw_fixture(&cpu);
  CHECK(render_read(30,30,1,1,&p,0)&&p==0xffff0000);
+ setenv("NFSV_HUD_SCALE","75",1);cpu.esp=0x10000;hud_initialize(&cpu,hud_init_fixture);
+ render_clear(0xff000000,1,0,uhd);cpu.esp=0x10000;hud_draw(&cpu,hud_draw_fixture);
+ CHECK(render_read(80,100,1,1,&p,0)&&p==0xffff0000);
+ CHECK(render_read(220,100,1,1,&p,0)&&p==0xff000000);
+ CHECK(render_read(510,510,1,1,&p,0)&&p==0xff00ff00);
+ unsetenv("NFSV_HUD_SCALE");
  free(g_mem);g_mem=NULL;puts("Metal GPU: uniform 4K HUD scale, scissor and unchanged world coordinates passed");
  /* Capture must own a snapshot even if the next frame or mode replaces it. */
  p=0xff123456;CHECK(render_write(0,0,1,1,&p,1));

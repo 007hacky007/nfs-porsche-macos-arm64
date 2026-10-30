@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 #include "runtime.h"
 #include "input.h"
 #include <stdio.h>
@@ -20,23 +21,56 @@ static void drain_paste(unsigned count){
 @implementation TestPasteView
 - (void)paste:(id)sender{(void)sender;[self insertText:@"Bookkeeper" replacementRange:NSMakeRange(NSNotFound,0)];}
 @end
-@interface CursorTestView : NFSVView
-@property(nonatomic,strong) NSCursor *installedCursor;
+@interface NFSVWindow : NSWindow
+- (void)windowDidBecomeKey:(NSNotification *)notification;
+- (void)windowDidResignKey:(NSNotification *)notification;
+- (BOOL)windowShouldClose:(NSWindow *)sender;
 @end
-@implementation CursorTestView
-- (void)addCursorRect:(NSRect)rect cursor:(NSCursor *)cursor{(void)rect;self.installedCursor=cursor;}
+@interface CursorTestWindow : NFSVWindow
+@property(nonatomic) BOOL testKey;
+@property(nonatomic) NSPoint testMouse;
 @end
+@implementation CursorTestWindow
+- (BOOL)isKeyWindow{return self.testKey;}
+- (NSPoint)mouseLocationOutsideOfEventStream{return self.testMouse;}
+@end
+static unsigned cursorHides,cursorUnhides;
+static void cursor_hide(id self,SEL command){(void)self;(void)command;cursorHides++;CHECK(cursorHides==cursorUnhides+1);}
+static void cursor_unhide(id self,SEL command){(void)self;(void)command;cursorUnhides++;CHECK(cursorUnhides<=cursorHides);}
+static void test_cursor(void){
+    Method hide=class_getClassMethod(NSCursor.class,@selector(hide));
+    Method unhide=class_getClassMethod(NSCursor.class,@selector(unhide));
+    IMP oldHide=method_setImplementation(hide,(IMP)cursor_hide),oldUnhide=method_setImplementation(unhide,(IMP)cursor_unhide);
+    CursorTestWindow *window=[[CursorTestWindow alloc] initWithContentRect:NSMakeRect(0,0,800,480)
+        styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+    NSView *content=[[NSClassFromString(@"NFSVContentView") alloc] initWithFrame:NSMakeRect(0,0,800,480)];
+    window.contentView=content;window.testMouse=NSMakePoint(320,240);window.testKey=YES;
+    NSEvent *event=[NSEvent enterExitEventWithType:NSEventTypeMouseEntered location:window.testMouse
+        modifierFlags:0 timestamp:0 windowNumber:window.windowNumber context:nil eventNumber:0 trackingNumber:0 userData:NULL];
+    [window windowDidBecomeKey:nil];CHECK(cursorHides==1&&cursorUnhides==0);
+    for(unsigned i=0;i<4;i++){
+        [NSCursor.arrowCursor set];[content resetCursorRects];[content updateTrackingAreas];
+        [window windowDidBecomeKey:nil];
+    }
+    CHECK(cursorHides==1&&cursorUnhides==0);
+    window.testMouse=NSMakePoint(900,240);[content mouseExited:event];CHECK(cursorUnhides==1);
+    [content layout];CHECK(content.subviews.firstObject.frame.origin.x==80);
+    window.testMouse=NSMakePoint(5,240);[content mouseEntered:event];CHECK(cursorHides==2);
+    window.testKey=NO;[window windowDidResignKey:nil];CHECK(cursorUnhides==2);
+    [window windowDidResignKey:nil];[content mouseEntered:event];CHECK(cursorHides==2&&cursorUnhides==2);
+    window.testKey=YES;[window windowDidBecomeKey:nil];CHECK(cursorHides==3);
+    setenv("NFSV_HIDE_CURSOR","0",1);[content resetCursorRects];CHECK(cursorUnhides==3);
+    [content mouseEntered:event];[window windowDidBecomeKey:nil];CHECK(cursorHides==3);
+    unsetenv("NFSV_HIDE_CURSOR");[content resetCursorRects];CHECK(cursorHides==4);
+    CHECK(![window windowShouldClose:window]);CHECK(cursorUnhides==4);
+    [content resetCursorRects];CHECK(cursorHides==5);
+    window.contentView=[[NSView alloc] initWithFrame:NSZeroRect];CHECK(cursorUnhides==5);
+    CHECK(!window.visible);
+    method_setImplementation(hide,oldHide);method_setImplementation(unhide,oldUnhide);
+}
 int main(void){@autoreleasepool{
     [NSApplication sharedApplication];
-    CursorTestView *cursorView=[[CursorTestView alloc] initWithFrame:NSMakeRect(0,0,640,480)];
-    [cursorView resetCursorRects];CHECK(cursorView.installedCursor);
-    CHECK(cursorView.installedCursor.image.valid&&cursorView.installedCursor.image.representations.count);
-    NSBitmapImageRep *cursorPixels=[NSBitmapImageRep imageRepWithData:cursorView.installedCursor.image.TIFFRepresentation];
-    CHECK(cursorPixels&&cursorPixels.hasAlpha);
-    for(NSInteger y=0;y<cursorPixels.pixelsHigh;y++)for(NSInteger x=0;x<cursorPixels.pixelsWide;x++)
-        CHECK([cursorPixels colorAtX:x y:y].alphaComponent==0);
-    setenv("NFSV_HIDE_CURSOR","0",1);[cursorView resetCursorRects];CHECK(cursorView.installedCursor==NSCursor.arrowCursor);
-    unsetenv("NFSV_HIDE_CURSOR");
+    test_cursor();input_pump();activation_messages=focus_losses=focus_gains=0;
     NSWindow *window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,1440,1080)
         styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
     NFSVView *view=[[NSClassFromString(@"NFSVView") alloc] initWithFrame:NSMakeRect(0,0,1440,1080)];
@@ -80,5 +114,5 @@ int main(void){@autoreleasepool{
     CHECK(nchar==125);unsigned letters=0;for(unsigned i=0;i<nchar;i++)if(chars[i]=='A')letters++;CHECK(letters==63);
     nchar=0;[view insertText:@"Cancel" replacementRange:NSMakeRange(NSNotFound,0)];input_focus(0);input_pump();usleep(40000);input_pump();CHECK(nchar==0);
     CHECK(!window.visible);
-    puts("Cocoa input: scaled game coordinates and clicks passed without displaying a window");
+    puts("Cocoa input: balanced cursor hiding, scaled coordinates and clicks passed without displaying a window");
 }}

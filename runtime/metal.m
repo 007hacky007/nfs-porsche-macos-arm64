@@ -24,7 +24,10 @@ void guest_lock(CPU *);
 static id<MTLDevice> gpu;
 static id<MTLCommandQueue> queue;
 static id<MTLLibrary> library;
-static id<MTLTexture> color,front_color,depth,white;
+static id<MTLTexture> color,front_color,depth,white,samples;
+static NSUInteger sample_count=1;
+static float anisotropy=1;
+static id<MTLRenderPipelineState> sample_copy;
 static id<MTLBuffer> vertices;
 static id<MTLCommandBuffer> command;
 static id<MTLRenderCommandEncoder> encoder;
@@ -39,6 +42,8 @@ static _Atomic int capture_requested;
 static _Atomic int capture_busy;
 static dispatch_queue_t capture_queue;
 void render_request_capture(void){atomic_store(&capture_requested,1);}
+/* Combined Patch asks for driver-forced antialiasing and anisotropic filtering; Metal is the driver here. */
+static int enhanced_graphics(void){const char *value=getenv("NFSV_ENHANCED_GRAPHICS");return !value||strcmp(value,"0");}
 static void die(NSString *what){fprintf(stderr,"Metal: %s\n",what.UTF8String);exit(3);}
 static void wait_command(id<MTLCommandBuffer> cmd){
  [cmd commit];
@@ -55,6 +60,8 @@ int render_init(void){
  if(!library)die(error.description);
  vertices=[gpu newBufferWithLength:32*1024*1024 options:MTLResourceStorageModeShared];
  textures=[NSMutableDictionary new];depths=[NSMutableDictionary new];
+ if(enhanced_graphics()){sample_count=[gpu supportsTextureSampleCount:4]?4:1;anisotropy=16;}
+ fprintf(stderr,"Metal: %lux antialiasing, %.0fx anisotropic filtering\n",(unsigned long)sample_count,anisotropy);
  MTLTextureDescriptor *d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:1 height:1 mipmapped:NO];
  d.storageMode=MTLStorageModeShared;white=[gpu newTextureWithDescriptor:d];uint32_t pixel=0xffffffff;
  [white replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0 withBytes:&pixel bytesPerRow:4];
@@ -65,12 +72,17 @@ void render_flush(void){
  if(command){id<MTLCommandBuffer> cmd=command;command=nil;wait_command(cmd);}
  cursor=0;
 }
+/* With antialiasing, draws go to the sample target and every pass resolves into color, which reads, writes and presents use. */
+static void attach_color(MTLRenderPassColorAttachmentDescriptor *a){
+ if(samples){a.texture=samples;a.resolveTexture=color;a.storeAction=MTLStoreActionStoreAndMultisampleResolve;}
+ else{a.texture=color;a.storeAction=MTLStoreActionStore;}
+}
 static void begin(void){
  if(encoder)return;
  if(!color)die(@"draw before video mode");
  if(!command)command=[queue commandBuffer];
  MTLRenderPassDescriptor *d=[MTLRenderPassDescriptor renderPassDescriptor];
- d.colorAttachments[0].texture=color;d.colorAttachments[0].loadAction=MTLLoadActionLoad;d.colorAttachments[0].storeAction=MTLStoreActionStore;
+ attach_color(d.colorAttachments[0]);d.colorAttachments[0].loadAction=MTLLoadActionLoad;
  d.stencilAttachment.texture=depth;d.stencilAttachment.loadAction=MTLLoadActionLoad;d.stencilAttachment.storeAction=MTLStoreActionStore;
  d.depthAttachment.texture=depth;d.depthAttachment.loadAction=MTLLoadActionLoad;d.depthAttachment.storeAction=MTLStoreActionStore;
  encoder=[command renderCommandEncoderWithDescriptor:d];
@@ -82,7 +94,9 @@ int render_mode(unsigned w,unsigned h){
  MTLTextureDescriptor *d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:w height:h mipmapped:NO];
  d.storageMode=MTLStorageModeShared;d.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;color=[gpu newTextureWithDescriptor:d];front_color=[gpu newTextureWithDescriptor:d];
  uint32_t *blank=calloc((size_t)w*h,4);if(!blank)return 0;[front_color replaceRegion:MTLRegionMake2D(0,0,w,h) mipmapLevel:0 withBytes:blank bytesPerRow:w*4];free(blank);
- d.pixelFormat=MTLPixelFormatDepth32Float_Stencil8;d.storageMode=MTLStorageModePrivate;d.usage=MTLTextureUsageRenderTarget;depth=[gpu newTextureWithDescriptor:d];
+ d.storageMode=MTLStorageModePrivate;d.usage=MTLTextureUsageRenderTarget;samples=nil;
+ if(sample_count>1){d.textureType=MTLTextureType2DMultisample;d.sampleCount=sample_count;samples=[gpu newTextureWithDescriptor:d];if(!samples)return 0;}
+ d.pixelFormat=MTLPixelFormatDepth32Float_Stencil8;depth=[gpu newTextureWithDescriptor:d];
  int clip[]={0,0,(int)w,(int)h};render_clear(0xff000000,1,0,clip);return color&&depth;
 }
 void render_clear(uint32_t c,float z,int depth_only,const int *clip){
@@ -95,7 +109,7 @@ void render_clear(uint32_t c,float z,int depth_only,const int *clip){
  }
  if(encoder){[encoder endEncoding];encoder=nil;}if(!command)command=[queue commandBuffer];
  MTLRenderPassDescriptor *d=[MTLRenderPassDescriptor renderPassDescriptor];
- d.colorAttachments[0].texture=color;d.colorAttachments[0].loadAction=depth_only?MTLLoadActionLoad:MTLLoadActionClear;d.colorAttachments[0].storeAction=MTLStoreActionStore;
+ attach_color(d.colorAttachments[0]);d.colorAttachments[0].loadAction=depth_only?MTLLoadActionLoad:MTLLoadActionClear;
  d.colorAttachments[0].clearColor=MTLClearColorMake(((c>>16)&255)/255.,((c>>8)&255)/255.,(c&255)/255.,(c>>24)/255.);
  d.stencilAttachment.texture=depth;d.stencilAttachment.loadAction=MTLLoadActionLoad;d.stencilAttachment.storeAction=MTLStoreActionStore;
  d.depthAttachment.texture=depth;d.depthAttachment.loadAction=MTLLoadActionClear;d.depthAttachment.storeAction=MTLStoreActionStore;d.depthAttachment.clearDepth=z;d.stencilAttachment.loadAction=MTLLoadActionClear;d.stencilAttachment.clearStencil=0;
@@ -114,7 +128,7 @@ void render_draw(const RenderVertex *v,unsigned count,unsigned primitive,const R
  if(key>=202)die(@"invalid pipeline key");
  if(!pipelines[key]){
   MTLRenderPipelineDescriptor *d=[MTLRenderPipelineDescriptor new];d.vertexFunction=[library newFunctionWithName:@"scene_vertex"];d.fragmentFunction=[library newFunctionWithName:@"scene_fragment"];
-  d.colorAttachments[0].pixelFormat=MTLPixelFormatBGRA8Unorm;d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
+  d.rasterSampleCount=sample_count;d.colorAttachments[0].pixelFormat=MTLPixelFormatBGRA8Unorm;d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
   if(s->depth_only)d.colorAttachments[0].writeMask=MTLColorWriteMaskNone;
   d.colorAttachments[0].blendingEnabled=!!s->blend;d.colorAttachments[0].sourceRGBBlendFactor=blend(s->src_blend);d.colorAttachments[0].sourceAlphaBlendFactor=blend(s->src_blend);d.colorAttachments[0].destinationRGBBlendFactor=blend(s->dst_blend);d.colorAttachments[0].destinationAlphaBlendFactor=blend(s->dst_blend);
   NSError *error=nil;pipelines[key]=[gpu newRenderPipelineStateWithDescriptor:d error:&error];if(!pipelines[key])die(error.description);
@@ -140,6 +154,7 @@ void render_draw(const RenderVertex *v,unsigned count,unsigned primitive,const R
  for(unsigned i=0;i<2;i++){
   unsigned f=s->filter[i]?1:0,m=s->mip[i],u=s->address_u[i],a=s->address_v[i];if(m>3||u>2||a>2)die(@"invalid sampler state");
   if(!samplers[f][m][u][a]){MTLSamplerDescriptor *d=[MTLSamplerDescriptor new];d.minFilter=d.magFilter=f?MTLSamplerMinMagFilterLinear:MTLSamplerMinMagFilterNearest;d.mipFilter=m==0?MTLSamplerMipFilterNotMipmapped:m==1?MTLSamplerMipFilterNearest:MTLSamplerMipFilterLinear;
+   if(f&&m)d.maxAnisotropy=(NSUInteger)anisotropy;
    MTLSamplerAddressMode address[]={MTLSamplerAddressModeClampToEdge,MTLSamplerAddressModeRepeat,MTLSamplerAddressModeMirrorRepeat};d.sAddressMode=address[u];d.tAddressMode=address[a];samplers[f][m][u][a]=[gpu newSamplerStateWithDescriptor:d];}
   [encoder setFragmentSamplerState:samplers[f][m][u][a] atIndex:i];[encoder setFragmentTexture:textures[@(s->texture[i])]?:white atIndex:i];
  }
@@ -198,4 +213,20 @@ void render_capture_frame(unsigned frame){
 }
 void render_capture_wait(void){if(capture_queue)dispatch_sync(capture_queue, ^{});}
 int render_read(unsigned x,unsigned y,unsigned w,unsigned h,uint32_t *out,int front){if(!color||x+w>width||y+h>height)return 0;render_flush();[(front?front_color:color) getBytes:out bytesPerRow:w*4 fromRegion:MTLRegionMake2D(x,y,w,h) mipmapLevel:0];return 1;}
-int render_write(unsigned x,unsigned y,unsigned w,unsigned h,const uint32_t *in,int front){if(!color||x+w>width||y+h>height)return 0;render_flush();[(front?front_color:color) replaceRegion:MTLRegionMake2D(x,y,w,h) mipmapLevel:0 withBytes:in bytesPerRow:w*4];return 1;}
+/* Copy a CPU write of color into every sample, so later passes do not resolve over it. */
+static void write_samples(unsigned x,unsigned y,unsigned w,unsigned h){
+ if(!sample_copy){
+  MTLRenderPipelineDescriptor *d=[MTLRenderPipelineDescriptor new];d.vertexFunction=[library newFunctionWithName:@"copy_vertex"];d.fragmentFunction=[library newFunctionWithName:@"copy_fragment"];
+  d.rasterSampleCount=sample_count;d.colorAttachments[0].pixelFormat=MTLPixelFormatBGRA8Unorm;
+  NSError *error=nil;sample_copy=[gpu newRenderPipelineStateWithDescriptor:d error:&error];if(!sample_copy)die(error.description);
+ }
+ command=[queue commandBuffer];MTLRenderPassDescriptor *d=[MTLRenderPassDescriptor renderPassDescriptor];
+ d.colorAttachments[0].texture=samples;d.colorAttachments[0].loadAction=MTLLoadActionLoad;d.colorAttachments[0].storeAction=MTLStoreActionStore;
+ encoder=[command renderCommandEncoderWithDescriptor:d];[encoder setRenderPipelineState:sample_copy];
+ [encoder setScissorRect:(MTLScissorRect){x,y,w,h}];[encoder setFragmentTexture:color atIndex:0];
+ [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];render_flush();
+}
+int render_write(unsigned x,unsigned y,unsigned w,unsigned h,const uint32_t *in,int front){
+ if(!color||x+w>width||y+h>height)return 0;render_flush();[(front?front_color:color) replaceRegion:MTLRegionMake2D(x,y,w,h) mipmapLevel:0 withBytes:in bytesPerRow:w*4];
+ if(samples&&!front&&w&&h)write_samples(x,y,w,h);return 1;
+}

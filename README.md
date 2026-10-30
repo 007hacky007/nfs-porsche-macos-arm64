@@ -41,7 +41,7 @@ The script sets up `.venv`, extracts images, verifies all game-data and executab
 
 When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications; it contains a private copy of the prepared files and needs no separate game-folder selection. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
 
-The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, and macOS cursor visibility. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch. **HUD size** ranges from 25% to 100% of the automatic resolution scaling, with the original HUD size as a minimum. Try 75% for a smaller HUD in 4K; 100% keeps the full automatic size. **Use in-game setting** lets the game's graphics menu control race resolution; choosing a specific launcher resolution overrides that setting for the session and selects 32-bit color when available. Menus and movies keep their original resolution. The frame-rate limit is a cap; the game and display can run slower.
+The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, macOS cursor visibility and enhanced graphics. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch. **HUD size** ranges from 25% to 100% of the automatic resolution scaling, with the original HUD size as a minimum. Try 75% for a smaller HUD in 4K; 100% keeps the full automatic size. **Use in-game setting** lets the game's graphics menu control race resolution; choosing a specific launcher resolution overrides that setting for the session and selects 32-bit color when available. Menus and movies keep their original resolution. The frame-rate limit is a cap; the game and display can run slower. **Enhanced graphics** is on by default. It adds 4x multisample antialiasing and 16x anisotropic texture filtering, the driver settings that the Combined Patch readme asks Windows players to force in their graphics driver. Turn it off for the original look or a higher frame rate on older Macs.
 
 ![NFSV launcher with resolution, frame-rate, fullscreen and cursor settings](docs/images/launcher.png)
 
@@ -54,6 +54,7 @@ If a checksum fails, use a complete, unmodified supported copy. Renaming an unsu
 - Original game code for menus, garage, Quick Race, Evolution and Factory Driver.
 - Native Metal rendering, including textures, depth, fog and the patched primitive-drawing path.
 - HD, 1440p and 4K race resolutions in 16 and 32 bit color.
+- Optional 4x antialiasing and 16x anisotropic filtering, on by default.
 - Race HUD scales with resolution, including text, gauges, the map and rear-view mirror.
 - Pre-game display settings, remembered between launches. Fullscreen is the initial default; Control-Command-F, F11 or the green window button toggles it while playing.
 - Original in-game pointer, with the Mac cursor hidden inside the game view by default and restored outside the window.
@@ -84,7 +85,7 @@ The mirror's 147 original archive members match the supported Combined Patch; it
 | `NFS5-Combined-Patch-v1.1.zip` (mirror) | 14026990 | `cc3087b5f8914dd47ab4e2b54da2e68c4caa03ab4871c11183a4720eba193d66` |
 | `SilentPatchNFS90s.zip` (Build 1) | 1122658 | `6c3b181301f3b6e646f4f42ad8e89f74dd3fea95cc028d055c56ddab7e0fd1b8` |
 
-Windows DirectX/Glide/OpenGL wrappers and the Windows configurator are replaced by native services. Preparation selects English, movies, fog and filtering enabled, automatic CPU calculation and the patch's default car-control setting. The older Enhanced Patch document bundled with Combined Patch describes additional gameplay enhancements that this package does not include. See [patch coverage](docs/patches.md).
+Windows DirectX/Glide/OpenGL wrappers and the Windows configurator are replaced by native services. Preparation selects English, movies, fog and filtering enabled, automatic CPU calculation and the patch's default car-control setting. The older Enhanced Patch document bundled with Combined Patch describes additional gameplay enhancements that this package does not include. Combined Patch v1.0 is not used: v1.1 contains all of its game data, and its executable and nGlide setup are Windows-only. See [patch coverage](docs/patches.md), which also lists other patches that were reviewed.
 
 ## Checksums and byte sizes
 

@@ -6,6 +6,7 @@
 #include "hud.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#x);exit(1);}}while(0)
 CPU *g_cur_cpu;
 uint8_t *g_mem;
@@ -46,6 +47,17 @@ int main(void){@autoreleasepool{
  RenderState s={.depth_func=7,.brightness=1,.stencil_func=7,.clip={0,0,640,480}};
  RenderVertex v[3]={{.x=0,.y=0,.z=.5,.rhw=1,.diffuse=0xffff0000},{.x=500,.y=0,.z=.5,.rhw=1,.diffuse=0xffff0000},{.x=0,.y=400,.z=.5,.rhw=1,.diffuse=0xffff0000}};
  render_draw(v,3,0,&s);CHECK(render_read(100,100,1,1,&p,0)&&p==0xffff0000);
+ /* Antialiasing blends the diagonal edge; without it every edge pixel is fully red or black. */
+ const char *enhanced=getenv("NFSV_ENHANCED_GRAPHICS");int antialiased=!enhanced||strcmp(enhanced,"0");
+ render_clear(0xff000000,1,0,clip);render_draw(v,3,0,&s);uint32_t row[40];int blended=0;
+ CHECK(render_read(230,200,40,1,row,0));for(unsigned i=0;i<40;i++)if(row[i]!=0xffff0000&&row[i]!=0xff000000)blended=1;
+ CHECK(blended==antialiased);
+ /* A CPU write to the back buffer must survive the next pass's resolve. */
+ uint32_t white_pixel=0xffffffff;CHECK(render_write(10,10,1,1,&white_pixel,0));
+ RenderVertex corner[3]={{.x=600,.y=470,.z=.5,.rhw=1,.diffuse=0xffff0000},{.x=640,.y=470,.z=.5,.rhw=1,.diffuse=0xffff0000},{.x=600,.y=480,.z=.5,.rhw=1,.diffuse=0xffff0000}};
+ render_draw(corner,3,0,&s);CHECK(render_read(10,10,1,1,&p,0)&&p==0xffffffff);
+ CHECK(render_read(11,11,1,1,&p,0)&&p==0xffff0000);
+ printf("Metal GPU: %s edges and back-buffer writes passed\n",antialiased?"antialiased":"aliased");
  uint32_t blue=0xff0000ff;CHECK(render_texture(7,1,1,0,1,&blue));s.texture[0]=7;
  for(unsigned i=0;i<3;i++)v[i].diffuse=0xffffffff;
  render_draw(v,3,0,&s);CHECK(render_read(100,100,1,1,&p,0)&&p==blue);

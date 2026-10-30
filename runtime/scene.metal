@@ -47,3 +47,6 @@ fragment float4 scene_fragment(Out v [[stage_in]],constant State &s [[buffer(0)]
  }
  c.rgb*=s.brightness;return saturate(c);
 }
+struct CopyOut {float4 pos [[position]];};
+vertex CopyOut copy_vertex(uint id [[vertex_id]]){CopyOut o;o.pos=float4(id==1?3.0:-1.0,id==2?-3.0:1.0,0.0,1.0);return o;}
+fragment float4 copy_fragment(CopyOut v [[stage_in]],texture2d<float> t [[texture(0)]]){return t.read(uint2(v.pos.xy));}

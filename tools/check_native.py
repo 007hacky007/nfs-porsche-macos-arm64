@@ -36,6 +36,7 @@ run(['out/platform-test'])
 run(['clang','-O1','-fobjc-arc','-Iruntime','-Igen/all','tests/metal.m','runtime/metal.m','runtime/hud.c','runtime/display.c',
      '-framework','Cocoa','-framework','Metal','-framework','QuartzCore','-o','out/metal-test'])
 run(['out/metal-test'])
+subprocess.run(['out/metal-test'],check=True,env={**os.environ,'NFSV_ENHANCED_GRAPHICS':'0'})
 run(['clang','-O1','-fobjc-arc','-Iruntime','tests/host.m','runtime/host.m','runtime/input.c','runtime/display.c',
      '-framework','Cocoa','-framework','Metal','-framework','QuartzCore','-o','out/host-test'])
 run(['out/host-test'])

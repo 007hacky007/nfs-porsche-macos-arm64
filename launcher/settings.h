@@ -5,6 +5,7 @@
 @property(nonatomic,strong) NSSlider *hudScale;
 @property(nonatomic,strong) NSButton *fullscreen;
 @property(nonatomic,strong) NSButton *hideCursor;
+@property(nonatomic,strong) NSButton *enhancedGraphics;
 - (instancetype)initWithDefaults:(NSUserDefaults *)defaults;
 - (void)saveToDefaults:(NSUserDefaults *)defaults;
 @end

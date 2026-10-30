@@ -27,6 +27,44 @@ The Combined Patch readme says it includes the Enhanced Patch's bug fixes, not a
 
 Data fixes come from NFS5 Essentials by ND4SPD Racer, the Combined Patch contributors and Smooth Shines and Lights by KrazyBoy. Verok's patch documentation is included in the archive. Required compiler/runtime notices remain in `third_party`.
 
+## Combined Patch v1.0 (not used)
+
+[Combined Patch v1.0](https://www.nfsaddons.com/downloads/nfspu/tools/3824/nfs-porsche-unleashed-combined-patch-v10.html) by A Future Pilot (April 2019) is the predecessor of v1.1. It was downloaded and compared file by file with the v1.1 archive:
+
+| Archive | Exact size (bytes) | SHA-256 of ZIP file |
+| --- | ---: | --- |
+| `nfs5-combined-patch.zip` from NFSAddons | 16402927 | `24576fc539320c0b5ac22f6d867f9e4f72a320c2bc2ea12a9396cac7dde029aa` |
+
+| v1.0 component | Status in this port |
+| --- | --- |
+| FEData and GameData files, including `GameData/Render/common.fsh` | Byte-identical to the files in v1.1, which are already applied. |
+| `Porsche.exe` from the "Complete" patch (v3.5 with byte patches) | Superseded by Verok's code in v1.1. Lens flare: the same byte change is in the linked executable. Night dashboard and texture quality on fast CPUs: Verok fixes these in his own way (rewritten dashboard code, replaced CPU calculation). 32-bit menu colors: not needed for 3D, because Metal always renders into a 32-bit target; menu screens still pick the game's 16-bit mode. Pits "B button": the `b` key still presses the menu Back button. This is an input change, not a graphics one, and is not applied. |
+| `gimme.dll`, `Porsche.sdb` | Not needed. Verok's code decodes driver avatars without `gimme.dll`, and the compatibility shim only affects Windows. |
+| nGlide installer, Voodoo drivers and registry files | Windows-only. The native Metal renderer replaces them. |
+| "Add anisotropic filtering and anti-aliasing through your graphics driver" | Implemented natively. See below. |
+
+The v1.0 readme also suggests a 0.7 gamma in the nGlide configurator. The v1.1 readme returns to 1.0, which this port keeps.
+
+## Enhanced graphics
+
+Both Combined Patch readmes ask players to force antialiasing and anisotropic filtering in the graphics driver, because the game's own renderers cannot. In this port the Metal renderer is the driver, so the launcher's **Enhanced graphics** option (on by default) does this directly:
+
+| Setting | Effect |
+| --- | --- |
+| 4x multisample antialiasing | Smooths polygon edges of cars, scenery and the garage. Every render pass resolves into the normal back buffer, so the game's pixel reads (sun glare test), movie frames and menu blits behave as before. Writes from the game are copied back into all samples. |
+| 16x anisotropic filtering | Applied to every linearly filtered, mipmapped texture, keeping road and terrain textures sharp at shallow angles. |
+
+The option sets `NFSV_ENHANCED_GRAPHICS` for the engine. With `0`, rendering is identical to earlier builds. Alpha-tested textures such as foliage are not smoothed by multisampling.
+
+## Other patches reviewed
+
+| Patch | Decision |
+| --- | --- |
+| [NFS5 Enhanced](https://github.com/iArtorias/nfs5_enhanced) v1.3.0 by iArtorias (GPL-3.0) | Not applied. It is a Windows ASI plugin with a Direct3D 11 driver that targets the unpatched v3.5 executable, not the Verok-linked executable this port uses. Its antialiasing, anisotropic filtering, HUD scaling, widescreen and SilentPatch fixes already have native equivalents here. Candidates for future native work: longer draw distance and far clip, lamp-glow depth bias, wheels on distant car models and frame interpolation above 64 Hz. Each needs addresses checked against the linked executable and play testing. |
+| Verok's NFSV Patch | Already applied, as the core of Combined Patch v1.1. |
+| SilentPatchNFS90s | Already covered, see above. |
+| Track and sky texture packs on NFSAddons, such as New Atmospheric Skyboxes | Not included. They change the game's art direction rather than fix it, have no stated redistribution terms and are best left as a personal choice. |
+
 ## SilentPatch Build 1
 
 The complete downloaded ZIP file is verified before extraction:

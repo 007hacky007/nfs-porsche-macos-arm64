@@ -25,6 +25,11 @@ void fileio_set_root(const char *);
 void fileio_set_write_root(const char *);
 void fileio_set_readonly_root(int);
 static CPU cpu;
+int fileio_call(CPU *,const char *,uint32_t *);
+static uint32_t attributes(uint32_t path){
+    CPU *c=&cpu;uint32_t out;PUSH32(path);
+    assert(fileio_call(c,"GetFileAttributesA",&out));c->esp+=4;return out;
+}
 extern int test_fail_copy_write,test_fail_copy_close;
 void heap_totals(uint64_t *,uint64_t *,uint64_t *,uint64_t *);
 static _Atomic int scheduled;
@@ -325,6 +330,42 @@ int main(void){
     test_fail_copy_write=1;openfile[4]=3;assert(api("CreateFileA",7,openfile)==0xffffffff);assert(api("GetLastError",0,NULL)==112);
     snprintf(path,sizeof path,"%s/profile.SAV",saves);assert(stat(path,&st)==-1);
     file=api("CreateFileA",7,openfile);assert(file!=0xffffffff);api("CloseHandle",1,&file);assert(!stat(path,&st)&&st.st_size==8);unlink(path);
+    /* Deleting a bundled profile must hide it without modifying the app. */
+    uint32_t profile=0xc0c000;
+    assert(api("DeleteFileA",1,&profile)==1);
+    assert(attributes(profile)==0xffffffff);
+    openfile[1]=0x80000000;openfile[4]=3;
+    assert(api("CreateFileA",7,openfile)==0xffffffff);
+    assert(api("DeleteFileA",1,&profile)==0&&api("GetLastError",0,NULL)==2);
+    snprintf(path,sizeof path,"%s/Profile.sav",assets);assert(!stat(path,&st)&&st.st_size==8);
+    strcpy((char *)g_mem+0xc0c400,"C:\\NFSV\\*.sav");uint32_t scan[]={0xc0c400,0xc0c500};
+    assert(api("FindFirstFileA",2,scan)==0xffffffff);
+    /* The deletion persists when the overlay is reopened, and a new file can shadow it. */
+    fileio_set_write_root(saves);
+    assert(attributes(profile)==0xffffffff);
+    openfile[1]=0xc0000000;openfile[4]=1;
+    file=api("CreateFileA",7,openfile);assert(file!=0xffffffff);api("CloseHandle",1,&file);
+    assert(attributes(profile)==0x80);
+    assert(api("DeleteFileA",1,&profile)==1);
+    assert(attributes(profile)==0xffffffff);
+    /* Profile creation copies a default HUD, then deletes that default. */
+    copyargs[0]=profile;assert(api("CopyFileA",3,copyargs)==0);
+    snprintf(path,sizeof path,"%s/Defaults",assets);assert(!mkdir(path,0755));
+    snprintf(path,sizeof path,"%s/Defaults/Default.hud",assets);fixture=fopen(path,"wb");assert(fixture);
+    assert(fwrite("hud",1,3,fixture)==3&&!fclose(fixture));
+    strcpy((char *)g_mem+0xc0c000,"C:\\NFSV\\Defaults\\DEFAULT.HUD");copyargs[2]=0;
+    assert(api("CopyFileA",3,copyargs)==1);
+    assert(api("DeleteFileA",1,&profile)==1);
+    assert(attributes(profile)==0xffffffff);
+    strcpy((char *)g_mem+0xc0c800,"C:\\NFSV\\Defaults");assert(attributes(0xc0c800)==0x10);
+    assert(attributes(copyargs[1])==0x80);
+    snprintf(path,sizeof path,"%s/copy.sav",saves);unlink(path);
+    snprintf(path,sizeof path,"%s/Defaults/Default.hud",assets);unlink(path);
+    snprintf(path,sizeof path,"%s/Defaults",assets);rmdir(path);
+    snprintf(path,sizeof path,"%s/.nfsv-deleted/defaults/default.hud",saves);unlink(path);
+    snprintf(path,sizeof path,"%s/.nfsv-deleted/defaults",saves);rmdir(path);
+    snprintf(path,sizeof path,"%s/.nfsv-deleted/profile.sav",saves);unlink(path);
+    snprintf(path,sizeof path,"%s/.nfsv-deleted",saves);rmdir(path);
     snprintf(path,sizeof path,"%s/Profile.sav",assets);unlink(path);rmdir(assets);rmdir(saves);rmdir(files);
     pthread_t worker;assert(!pthread_create(&worker,NULL,message_worker,NULL));
     uint32_t getmessage[]={0xc0d000,0,0,0};

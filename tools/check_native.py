@@ -19,6 +19,10 @@ run(['out/launcher-test'])
 run(['clang','-O1','-DNFSV_NO_IMAGE','-Iruntime','-include','gen/all/image.h',
      'tests/launch_settings.c','runtime/launch_settings.c','runtime/display.c','runtime/memory.c','-o','out/launch-settings-test'])
 run(['out/launch-settings-test'])
+run(['clang','-O1','-DNFSV_NO_IMAGE','-Iruntime','tests/hud.c','runtime/hud.c','runtime/memory.c','-o','out/hud-test'])
+run(['out/hud-test'])
+run(['clang','-O1','-DNFSV_NO_IMAGE','-Iruntime','tests/frontend.c','runtime/frontend.c','runtime/memory.c','-o','out/frontend-test'])
+run(['out/frontend-test'])
 run(['clang','-DNFSV_NO_IMAGE','-Iruntime','tests/memory.c','runtime/memory.c','-o','out/memory-test'])
 run(['out/memory-test'])
 run(['clang','-O1','-DNFSV_NO_IMAGE','-Iruntime','tests/audio.c','runtime/audio.m','runtime/memory.c',
@@ -29,7 +33,7 @@ run(['clang','-O1','-fobjc-arc','-Iruntime','-Igen/all','-include','gen/all/imag
      'out/obj/gen_all_image.c.o','-framework','Cocoa','-framework','Metal','-framework','QuartzCore',
      '-framework','AudioUnit','-framework','AudioToolbox','-framework','CoreAudio','-o','out/platform-test'])
 run(['out/platform-test'])
-run(['clang','-O1','-fobjc-arc','-Iruntime','-Igen/all','tests/metal.m','runtime/metal.m','runtime/display.c',
+run(['clang','-O1','-fobjc-arc','-Iruntime','-Igen/all','tests/metal.m','runtime/metal.m','runtime/hud.c','runtime/display.c',
      '-framework','Cocoa','-framework','Metal','-framework','QuartzCore','-o','out/metal-test'])
 run(['out/metal-test'])
 run(['clang','-O1','-fobjc-arc','-Iruntime','tests/host.m','runtime/host.m','runtime/input.c','runtime/display.c',

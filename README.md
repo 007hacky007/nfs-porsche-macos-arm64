@@ -54,6 +54,7 @@ If a checksum fails, use a complete, unmodified supported copy. Renaming an unsu
 - Original game code for menus, garage, Quick Race, Evolution and Factory Driver.
 - Native Metal rendering, including textures, depth, fog and the patched primitive-drawing path.
 - HD, 1440p and 4K race resolutions in 16 and 32 bit color.
+- Race HUD scales with resolution, including text, gauges, the map and rear-view mirror.
 - Pre-game display settings, remembered between launches. Fullscreen is the initial default; Control-Command-F, F11 or the green window button toggles it while playing.
 - Original in-game pointer, with the Mac cursor hidden inside the game view by default and restored outside the window.
 - Keyboard/mouse input and Command-V or Control-V text paste.

@@ -26,6 +26,28 @@ def pointer_seeds(pe):
     md.detail = True
     md.skipdata = True
     mapped = pe.get_memory_mapped_image()
+
+    def instruction_pointers(instruction):
+        if not instruction.id:
+            return
+        if instruction.mnemonic in ('mov', 'push', 'lea'):
+            for op in instruction.operands:
+                if op.type == capstone.CS_OP_IMM and in_text(op.imm):
+                    yield op.imm
+        if instruction.mnemonic == 'jmp' and instruction.operands[0].type == capstone.CS_OP_MEM:
+            operand = instruction.operands[0].mem
+            if not operand.base and operand.index and operand.scale == 4:
+                # Watcom/CRT jump tables need not be DWORD-aligned.
+                offset = operand.disp - base
+                for _ in range(4096):
+                    if offset < 0 or offset + 4 > len(mapped):
+                        break
+                    target = struct.unpack_from('<I', mapped, offset)[0]
+                    if not in_text(target):
+                        break
+                    yield target
+                    offset += 4
+
     for section in pe.sections:
         data = section.get_data()
         for offset in range(0, len(data) - 3, 4):
@@ -34,23 +56,28 @@ def pointer_seeds(pe):
                 seeds.add(value)
         if section.Characteristics & 0x20000000:
             for instruction in md.disasm(data, base + section.VirtualAddress):
-                if instruction.id and instruction.mnemonic == 'jmp' and instruction.operands[0].type == capstone.CS_OP_MEM:
-                    operand = instruction.operands[0].mem
-                    if not operand.base and operand.index and operand.scale == 4:
-                        # Watcom/CRT jump tables need not be DWORD-aligned.
-                        offset = operand.disp - base
-                        for _ in range(4096):
-                            if offset < 0 or offset + 4 > len(mapped):
-                                break
-                            target = struct.unpack_from('<I', mapped, offset)[0]
-                            if not in_text(target):
-                                break
-                            seeds.add(target)
-                            offset += 4
-                if instruction.id and instruction.mnemonic in ('mov', 'push', 'lea'):
-                    for op in instruction.operands:
-                        if op.type == capstone.CS_OP_IMM and in_text(op.imm):
-                            seeds.add(op.imm)
+                seeds.update(instruction_pointers(instruction))
+
+    # Keep the existing targets, then recover pointers a linear sweep loses inside inline data.
+    pending = list(seeds) + [base + pe.OPTIONAL_HEADER.AddressOfEntryPoint]
+    seen = set()
+    while pending:
+        address = pending.pop()
+        if address in seen or not in_text(address):
+            continue
+        seen.add(address)
+        instruction = next(md.disasm(mapped[address-base:address-base+15], address, count=1), None)
+        if instruction is None or not instruction.id:
+            continue
+        operands = instruction.operands
+        for target in instruction_pointers(instruction):
+            seeds.add(target)
+            pending.append(target)
+        if instruction.group(capstone.CS_GRP_JUMP) or instruction.group(capstone.CS_GRP_CALL):
+            if operands[0].type == capstone.CS_OP_IMM:
+                pending.append(operands[0].imm)
+        if not instruction.group(capstone.CS_GRP_RET) and instruction.mnemonic not in ('jmp', 'int3', 'hlt', 'ud2'):
+            pending.append(address + instruction.size)
     return seeds
 
 

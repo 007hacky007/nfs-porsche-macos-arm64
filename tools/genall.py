@@ -6,6 +6,7 @@ import pefile
 from capstone import *
 from capstone.x86 import *
 from lift import Lifter, Unsupported, _lregs
+from native_hooks import NATIVE_HOOKS, wrap_native
 
 EXE = sys.argv[1]
 NSHARD = int(sys.argv[2]) if len(sys.argv)>2 else 128
@@ -139,7 +140,7 @@ def _init(inl=None):
 
 def _inlprobe(a):
     """leaf + small + not an override -> (address, code) or (address, None)"""
-    if a in OVERRIDES: return a, None
+    if a in OVERRIDES or a in NATIVE_HOOKS: return a, None
     _L.traps = 0
     try:
         code, tg = _L.lift(a)
@@ -174,7 +175,7 @@ def _shard(args):
             body = _INL_CALL.sub(lambda m: (used.add(int(m.group(1), 16)) or f"inl_{m.group(1)}(c)")
                                  if int(m.group(1), 16) in _INL else m.group(0), body)
             code = hdr + '{' + body
-        parts.append(code); defined.append(a)
+        parts.append(wrap_native(a,code)); defined.append(a)
         refs |= {t for t in tg if L.in_text(t)}
         traps += L.traps; trunc += L.truncated
         kinds.update(L.trap_kinds); L.trap_kinds.clear()

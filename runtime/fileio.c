@@ -122,6 +122,18 @@ static int resolve_in(const char *root, const char *win, char *out, size_t outsz
  * If it is not set (from a terminal, or a bundle with its data outside)
  * everything stays in the single root as before. */
 static char g_wroot[1024] = "";
+/* A deletion in the save overlay must also hide a bundled default/profile. */
+static int deletion_path(const char *win, char *out, size_t size){
+    if (!g_wroot[0]) return 0;
+    char rel[1024]; rel_of(win, rel, sizeof rel);
+    for (char *p=rel; *p; p++) *p=(char)tolower((unsigned char)*p);
+    if (snprintf(out,size,"%s/.nfsv-deleted/%s",g_wroot,rel)>=(int)size){errno=ENAMETOOLONG;return 0;}
+    return 1;
+}
+static int deleted(const char *win){
+    char marker[1024]; struct stat st;
+    return deletion_path(win,marker,sizeof marker) && stat(marker,&st)==0 && S_ISREG(st.st_mode);
+}
 void fileio_set_write_root(const char *dir){
     if (!dir || !*dir){ g_wroot[0] = 0; return; }
     snprintf(g_wroot, sizeof g_wroot, "%s", dir);
@@ -232,6 +244,9 @@ static int resolve(const char *win, char *out, size_t outsz){
         if (resolve_in(g_wroot, win, w, sizeof w) && strcmp(w, g_wroot) != 0){
             snprintf(out, outsz, "%s", w); return 1; }
     }
+    if (deleted(win)){
+        resolve_in(g_wroot,win,out,outsz); return 0;
+    }
     if (lpack_resolve(win, out, outsz)) return 1;
     return resolve_in(g_root, win, out, outsz);
 }
@@ -270,6 +285,7 @@ static int copy_up(const char *win, const char *wpath){
     if (!g_wroot[0]) return 1;
     struct stat st; if (stat(wpath, &st) == 0) return 1;
     if(errno!=ENOENT)return 0;
+    if(deleted(win))return 1;
     char src[1024];
     if (resolve_in(g_root, win, src, sizeof src) && stat(src, &st) == 0 && S_ISREG(st.st_mode))
         return copy_file(src, wpath,0);
@@ -450,6 +466,8 @@ static int find_next(FH *f, char *nm, size_t nsz, char *full, size_t fsz){
         while ((e = readdir(f->dir2))){
             if (e->d_name[0] == '.') continue;
             if (!wild_match(f->pat, e->d_name)) continue;
+            char candidate[2048];snprintf(candidate,sizeof candidate,"%s/%s",f->path,e->d_name);
+            if (deleted(candidate+strlen(g_root)+1)) continue;
             if (f->path1[0]){               /* already given from the write root */
                 char p[1024]; struct stat st;
                 snprintf(p, sizeof p, "%s/%s", f->path1, e->d_name);
@@ -771,8 +789,21 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
     else if (!strcmp(n,"DeleteFileA")){
         char real[1024]; resolve_w(GS(A(c,0)), real, sizeof real);
         if (!write_allowed("DeleteFileA", GS(A(c,0)), real)){ r = 0; set_err(c, 5u); }   /* ERROR_ACCESS_DENIED */
-        else { r = (unlink(real)==0); if (!r) set_err(c, errno_to_win(errno));
+        else {
+            char visible[1024],base[1024];struct stat st;
+            if (!resolve(GS(A(c,0)),visible,sizeof visible)){set_err(c,2);}
+            else if(stat(visible,&st)||!S_ISREG(st.st_mode)){set_err(c,5);}
+            else {
+                int ok=1;
+                if(g_wroot[0]&&resolve_in(g_root,GS(A(c,0)),base,sizeof base)){
+                    char marker[1024];
+                    ok=deletion_path(GS(A(c,0)),marker,sizeof marker);
+                    if(ok){mkparents(marker);int fd=open(marker,O_WRONLY|O_CREAT,0600);ok=fd>=0;if(ok)ok=close(fd)==0;}
                 }
+                if(ok){r=!strcmp(visible,real)?unlink(real)==0:1;}
+                if(!ok||!r)set_err(c,errno_to_win(errno));
+            }
+        }
     }
     else if (!strcmp(n,"GetFullPathNameA")){
         /* (lpFileName, nBufferLength, lpBuffer, lpFilePart)  v12na: was a stub

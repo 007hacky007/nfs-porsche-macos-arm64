@@ -5,6 +5,7 @@
 #include "render.h"
 #include "shader.h"
 #include "display.h"
+#include "hud.h"
 #include <errno.h>
 #include <time.h>
 #include <stdio.h>
@@ -107,6 +108,8 @@ static MTLBlendFactor blend(unsigned f){
 void render_draw(const RenderVertex *v,unsigned count,unsigned primitive,const RenderState *s){
  if(!count)return;size_t bytes=(size_t)count*sizeof *v;if(bytes>vertices.length)die(@"vertex batch exceeds buffer");
  if(cursor+bytes>vertices.length)render_flush();begin();memcpy((char *)vertices.contents+cursor,v,bytes);
+ RenderVertex *uploaded=(RenderVertex *)((char *)vertices.contents+cursor);
+ hud_vertices(uploaded,count);
  unsigned key=(s->blend?1+s->src_blend*10+s->dst_blend:0)+(s->depth_only?101:0);
  if(key>=202)die(@"invalid pipeline key");
  if(!pipelines[key]){
@@ -130,7 +133,8 @@ void render_draw(const RenderVertex *v,unsigned count,unsigned primitive,const R
  }
  [encoder setDepthStencilState:depths[@(dk)]];[encoder setStencilReferenceValue:0];
  [encoder setFrontFacingWinding:MTLWindingClockwise];[encoder setCullMode:s->cull==0?MTLCullModeNone:s->cull==1?MTLCullModeBack:MTLCullModeFront];
- int x=MAX(0,s->clip[0]),y=MAX(0,s->clip[1]),r=MIN((int)width,s->clip[2]),b=MIN((int)height,s->clip[3]);
+ int clip[4];memcpy(clip,s->clip,sizeof clip);hud_clip(clip);
+ int x=MAX(0,clip[0]),y=MAX(0,clip[1]),r=MIN((int)width,clip[2]),b=MIN((int)height,clip[3]);
  if(r<=x||b<=y)return;[encoder setScissorRect:(MTLScissorRect){(NSUInteger)x,(NSUInteger)y,(NSUInteger)(r-x),(NSUInteger)(b-y)}];
  float size[]={(float)width,(float)height};[encoder setVertexBuffer:vertices offset:cursor atIndex:0];[encoder setVertexBytes:size length:sizeof size atIndex:1];[encoder setFragmentBytes:s length:sizeof *s atIndex:0];
  for(unsigned i=0;i<2;i++){

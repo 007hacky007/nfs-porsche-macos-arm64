@@ -28,6 +28,19 @@ class PatchTests(unittest.TestCase):
         struct.pack_into('<II', data, 521, 0x402000, 0x401000)
         self.assertIn(0x402000, pointer_seeds(pefile.PE(data=bytes(data))))
 
+    def test_recovers_callbacks_after_inline_data(self):
+        import struct
+        from test_inspect_pe import minimal_pe
+        from tools.prepare import pointer_seeds
+        # A linear decoder consumes the callback's MOV as part of the inline data.
+        for prefix in (bytes.fromhex('eb03b80000'), bytes.fromhex('c390b80000')):
+            with self.subTest(prefix=prefix.hex()):
+                data = bytearray(minimal_pe())
+                data[512:528] = prefix + bytes.fromhex('c7050030400000204000c3')
+                if prefix[0] == 0xc3:
+                    struct.pack_into('<I', data, 1028, 0x401005)
+                self.assertIn(0x402000, pointer_seeds(pefile.PE(data=bytes(data))))
+
     def test_overlay_resolves_existing_directory_and_filename_casing(self):
         from pathlib import PurePosixPath
         with tempfile.TemporaryDirectory() as tmp:

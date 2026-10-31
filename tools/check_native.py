@@ -36,7 +36,7 @@ if not PORTABLE:
     objects=sorted(str(p) for p in Path('out/obj').glob('runtime_*.o') if p.name not in ('runtime_main.m.o','runtime_host.m.o'))
     run(['clang','-O1','-fobjc-arc','-Iruntime','-Igen/all','-include','gen/all/image.h','tests/platform.c','tests/platform_host.m','tests/io_faults.c',*objects,
          'out/obj/gen_all_image.c.o','-framework','Cocoa','-framework','Metal','-framework','QuartzCore',
-         '-framework','AudioUnit','-framework','AudioToolbox','-framework','CoreAudio','-o','out/platform-test'])
+         '-framework','AudioUnit','-framework','AudioToolbox','-framework','CoreAudio','-framework','GameController','-o','out/platform-test'])
     run(['out/platform-test'])
     run(['clang','-O1','-fobjc-arc','-Iruntime','-Igen/all','tests/metal.m','runtime/metal.m','runtime/hud.c','runtime/display.c',
          '-framework','Cocoa','-framework','Metal','-framework','QuartzCore','-o','out/metal-test'])

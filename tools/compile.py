@@ -50,5 +50,5 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 
 subprocess.run(['clang', '-arch', 'arm64', '-mmacosx-version-min=11.0', '-Wl,-dead_strip',
                 '-o', 'out/nfsv', *map(str, objects), '-lm', '-lz',
                 '-framework', 'Cocoa', '-framework', 'Metal', '-framework', 'QuartzCore',
-                '-framework', 'AudioToolbox', '-framework', 'AudioUnit', '-framework', 'CoreAudio'], check=True)
+                '-framework', 'AudioToolbox', '-framework', 'AudioUnit', '-framework', 'CoreAudio', '-framework', 'GameController'], check=True)
 print('Built out/nfsv (ARM64)')

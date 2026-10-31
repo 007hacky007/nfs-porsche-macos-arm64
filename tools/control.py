@@ -6,7 +6,7 @@ import time
 
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--fifo',default='out/control')
-p.add_argument('action',choices=['press','down','up','text','mouse','click','capture','fullscreen','close','windowinfo'])
+p.add_argument('action',choices=['press','down','up','text','mouse','click','pad','capture','fullscreen','close','windowinfo'])
 p.add_argument('values',nargs='*')
 a=p.parse_args()
 fd=os.open(a.fifo,os.O_WRONLY|os.O_NONBLOCK)
@@ -16,6 +16,9 @@ try:
     if a.action in ('capture','fullscreen','close','windowinfo'):
         if a.values:p.error(f'{a.action} takes no values')
         send(a.action)
+    elif a.action=='pad':
+        if not a.values:p.error('pad requires connect 0|1, button NAME 0|1 or axis NAME VALUE')
+        send('pad '+' '.join(a.values))
     elif a.action=='text':
         for ch in ' '.join(a.values):send(f'text {ord(ch)}');time.sleep(.05)
     elif a.action=='click':

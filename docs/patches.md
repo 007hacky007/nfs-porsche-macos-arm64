@@ -78,14 +78,14 @@ The Windows ASI and proxy DirectInput DLL are not loaded into the ARM64 app. Its
 | NFS Porsche behavior | Native equivalent |
 | --- | --- |
 | Thread affinity and stability | Original game execution is serialized by the guest lock, with explicit release during blocking host operations. CoreAudio and Metal retain their native workers. Windows CPU-affinity hooks are unnecessary. |
-| DirectInput enumeration and rebinding | Enumerate the native keyboard/mouse interfaces directly, without Windows device enumeration. No Windows 10 controller scan occurs. |
+| DirectInput enumeration and rebinding | Enumerate the native keyboard, mouse and one virtual game controller directly, without Windows device enumeration. No Windows 10 controller scan occurs. The controller is backed by macOS GameController and is always listed, so its bindings keep their device. |
 | Keyboard after switching apps | Release held keys and buttons, post input-focus messages and clear the original game's keyboard buffer on focus loss. Keep native display and audio active, avoiding the Windows display suspend/restart path. |
 | OpenGL race-transition leak | Metal owns graphics resources; the native Thrash surface allocations are freed on video-mode changes and checked by repeated 4K/menu cycles. The affected OpenGL drivers do not run. |
 | Alt+F4 | Option-F4 closes the game through its normal close-message path. Command-Q and the Mac window close button also work. |
 | Lock keys | Native input does not synthesize lock-key changes. |
 | Clipboard paste | Command-V and Control-V insert clipboard text through original character messages. Delimiters preserve repeated characters, matching SilentPatch's workaround. Delivery is paced for the original UI's small character queue. Unsupported characters and control characters are omitted. |
 
-Fixes labeled only for NFS2SE, NFS3 or NFS4 in SilentPatch are outside this game's scope. Native macOS gamepad support is not added by installing a Windows DirectInput patch.
+Fixes labeled only for NFS2SE, NFS3 or NFS4 in SilentPatch are outside this game's scope. Native macOS game controller support comes from the port's own DirectInput joystick, not from a Windows DirectInput patch.
 
 Reference: [SilentPatchNFS90s Build 1 source](https://github.com/CookiePLMonster/SilentPatchNFS90s/tree/0b8b7149f0cc0914c10c0ad6996636b9e6d726ce). Its behavior is reimplemented natively; no SilentPatch code is included. The upstream ReadMe from the verified download is kept with the prepared files.
 

@@ -1,6 +1,8 @@
-/* Guest COM layouts for DirectInput 5, using native keyboard and mouse state. */
+/* Guest COM layouts for DirectInput 5, using native keyboard and mouse state
+   and the virtual game pad (joystick.c). */
 #include "runtime.h"
 #include "input.h"
+#include "joystick.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,16 +34,21 @@ static void guid(uint32_t p,uint32_t first){
     memcpy(g_mem+p+8,tail,8);
 }
 
-static uint32_t enumerate_devices(CPU *c,unsigned type,uint32_t fn,uint32_t context){
+static uint32_t enumerate_devices(CPU *c,unsigned type,uint32_t fn,uint32_t context,uint32_t flags){
     uint32_t p=win32_alloc(580,1);
-    for(unsigned kind=1;kind<=2;kind++){
-        unsigned devtype=kind==1?3:2;
-        if(type && type!=devtype)continue;
+    /* No device reports force feedback (DIEDFL_FORCEFEEDBACK). */
+    for(unsigned kind=1;kind<=3&&!(flags&0x100);kind++){
+        unsigned devtype=kind==1?3:kind==2?2:JOYSTICK_DEVTYPE;
+        if(type && type!=(devtype&0xff))continue;
+        if(kind==3&&!joystick_available())continue;
         memset(g_mem+p,0,580);MR32(p)=580;
-        guid(p+4,kind==1?0x6f1d2b61:0x6f1d2b60);guid(p+20,kind==1?0x6f1d2b61:0x6f1d2b60);
-        MR32(p+36)=devtype;
-        strcpy((char *)g_mem+p+40,kind==1?"Keyboard":"Mouse");
-        strcpy((char *)g_mem+p+300,kind==1?"Native Keyboard":"Native Mouse");
+        if(kind==3)joystick_device_instance(p);
+        else{
+            guid(p+4,kind==1?0x6f1d2b61:0x6f1d2b60);guid(p+20,kind==1?0x6f1d2b61:0x6f1d2b60);
+            MR32(p+36)=devtype;
+            strcpy((char *)g_mem+p+40,kind==1?"Keyboard":"Mouse");
+            strcpy((char *)g_mem+p+300,kind==1?"Native Keyboard":"Native Mouse");
+        }
         uint32_t args[]={p,context};
         if(!call_guest(c,fn,2,args))break;
     }
@@ -100,10 +107,11 @@ void com_call(CPU *c,uint32_t thunk){
         if(slot==3){
             nargs=4;uint32_t first=*(uint32_t *)guest_ptr(A(c,1),16),out=A(c,2);
             unsigned device=first==0x6f1d2b61?1:first==0x6f1d2b60?2:0;
+            if(!device&&joystick_matches_guid(A(c,1))&&joystick_available()){device=3;joystick_reset();}
             if(device)*(uint32_t *)guest_ptr(out,4)=com_object(2,device);
             else{*(uint32_t *)guest_ptr(out,4)=0;r=0x80070002;}
         }
-        else if(slot==4){nargs=5;r=enumerate_devices(c,A(c,1),A(c,2),A(c,3));}
+        else if(slot==4){nargs=5;r=enumerate_devices(c,A(c,1),A(c,2),A(c,3),A(c,4));}
         else if(slot==5){nargs=2;r=0;}
         else if(slot==7){nargs=3;r=0;}
         else runtime_fail(c,"DirectInput method",thunk);
@@ -111,12 +119,15 @@ void com_call(CPU *c,uint32_t thunk){
     else if(family==2){
         if(slot==3){
             nargs=2;uint32_t p=A(c,1),size=*(uint32_t *)guest_ptr(p,4);
-            if(size<24||size>44)r=0x80070057;
+            if(kind==3)r=joystick_caps(p);
+            else if(size<24||size>44)r=0x80070057;
             else{memset(guest_ptr(p,size),0,size);MR32(p)=size;MR32(p+4)=1;MR32(p+8)=kind==1?3:2;MR32(p+12)=kind==1?0:3;MR32(p+16)=kind==1?256:4;}
         }
+        else if(slot==4&&kind==3){nargs=4;r=joystick_enum_objects(c,A(c,1),A(c,2),A(c,3));}
         else if(slot==5||slot==6){
             nargs=3;uint32_t prop=A(c,1),p=A(c,2);
-            if(prop!=1&&prop!=2)r=0x80004001;
+            if(kind==3)r=joystick_property(self,slot==6,prop,p);
+            else if(prop!=1&&prop!=2)r=0x80004001;
             else if(!mem_valid(p,20)||MR32(p)!=20||MR32(p+4)!=16)r=0x80070057;
             else if(slot==5)MR32(p+16)=prop==1?MR32(self+16):1;
             else if(prop==1)MR32(self+16)=MR32(p+16)>1024?1024:MR32(p+16);
@@ -129,6 +140,7 @@ void com_call(CPU *c,uint32_t thunk){
             if(!MR32(self+12))r=0x8007000c;
             else if(kind==1&&size==256)input_keyboard_state(out);
             else if(kind==2&&(size==16||size==20))input_mouse_state(out,size);
+            else if(kind==3)r=joystick_state(out,size);
             else r=0x80070057;
         }
         else if(slot==10){
@@ -147,9 +159,18 @@ void com_call(CPU *c,uint32_t thunk){
         else if(slot==11){nargs=2;uint32_t format=A(c,1);guest_ptr(format,24);MR32(self+20)=format;}
         else if(slot==12){nargs=2;MR32(self+24)=A(c,1);input_set_event((int)kind,A(c,1));}
         else if(slot==13){nargs=3;}
-        else if(slot==14){nargs=4;r=(uint32_t)object_info(A(c,1),kind,A(c,2),A(c,3));}
+        else if(slot==14){nargs=4;r=kind==3?joystick_object_info(A(c,1),A(c,2),A(c,3)):(uint32_t)object_info(A(c,1),kind,A(c,2),A(c,3));}
+        else if(slot==15&&kind==3){nargs=2;r=joystick_device_instance(A(c,1));}
         else if(slot==15){nargs=2;uint32_t p=A(c,1),size=*(uint32_t *)guest_ptr(p,4);if(size<560||size>580)r=0x80070057;else{memset(guest_ptr(p,size),0,size);MR32(p)=size;guid(p+4,kind==1?0x6f1d2b61:0x6f1d2b60);guid(p+20,kind==1?0x6f1d2b61:0x6f1d2b60);MR32(p+36)=kind==1?3:2;strcpy((char *)g_mem+p+40,kind==1?"Keyboard":"Mouse");strcpy((char *)g_mem+p+300,kind==1?"Native Keyboard":"Native Mouse");}}
+        else if(slot==16){nargs=3;r=0;}
+        else if(slot==17){nargs=4;r=0;}
+        /* IDirectInputDevice2 force feedback: no device supports effects. */
+        else if(slot==18){nargs=5;if(mem_valid(A(c,3),4))MR32(A(c,3))=0;r=0x80004001;}
+        else if(slot==19||slot==23){nargs=4;r=0;}
+        else if(slot==20){nargs=3;r=0x80004001;}
+        else if(slot==21||slot==22||slot==24){nargs=2;r=0x80004001;}
         else if(slot==25)r=0;
+        else if(slot==26){nargs=5;r=0x80004001;}
         else runtime_fail(c,"DirectInput device method",thunk);
     }
     else if(family==4||family==5){

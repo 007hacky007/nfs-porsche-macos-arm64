@@ -17,6 +17,7 @@ Play **Need for Speed: Porsche Unleashed** natively on your Apple Silicon Mac, b
 - Fullscreen by default. Control-Command-F, F11 or the green window button switches between fullscreen and a window while you play.
 - The original in-game pointer. The Mac cursor is hidden inside the game view by default and comes back outside the window.
 - Keyboard and mouse controls, and Command-V or Control-V to paste text.
+- Game controllers: PS4 (DualShock 4), PS5 (DualSense), Xbox, Switch Pro and other Mac-supported gamepads, over Bluetooth or USB. See [Game controllers](#game-controllers).
 - Switching to another app releases held controls and keeps the picture and sound running without restarting the song.
 - Your own saves, kept apart from the game files, which stay unchanged.
 
@@ -77,6 +78,26 @@ Open NFSV.app. The launcher appears first:
 Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
 
 Saves and the game log live in `~/Library/Application Support/NFSV`. Rebuilding or replacing the app does not touch them, so existing careers keep their progress. Quit the game before rebuilding.
+
+### Game controllers
+
+Connect the controller to the Mac first, in **System Settings > Bluetooth** (or with a USB cable). It can be connected before or after starting the game.
+
+In the game, open **options... > controllers > game controls**, set **default controller** to **Game Controller** and click **reset defaults**. The game's own defaults then fit the pad:
+
+| Control | Pad (PlayStation / Xbox) | Shown in the game as |
+| --- | --- | --- |
+| Accelerate, brake | R2 / RT, L2 / LT (analog) | joystick 1 y axis up, down |
+| Steer | Left stick | joystick 1 x axis |
+| Hand brake | Cross / A | Button 1 |
+| Look behind | Square / X | Button 3 |
+| Reset car | Triangle / Y | Button 4 |
+| Cameras | Share / View | Button 6 |
+| Shift up, down | R1 / RB, L1 / LB | Button 8, Button 9 |
+
+Any control can be rebound on the same screen: click it, then press a button or move a stick or trigger. The other buttons are Circle / B (Button 2), Options / Menu (Button 5), the left stick button (Button 7) and the right stick button (Button 10). The left stick's vertical movement is the z axis, the right stick is the x and y rotation axes, and the D-pad is the hat switch. The triggers share one axis, as Xbox pads do under DirectInput on Windows, so pressing both at once cancels out. The **deadzone** tab adjusts each axis. Force feedback and vibration are not supported.
+
+The first connected controller is used. While another app is in front, the controller is ignored, like the keyboard.
 
 ## Which game copy works
 
@@ -218,7 +239,7 @@ The builder creates a different `Porsche.exe` in its private prepared folder by 
 
 ## Limitations
 
-Menus and movies retain their source artwork and aspect ratio. Higher race resolutions do not add detail to that artwork. Menus, driving, sound and intro playback have been exercised; complete career progression, every patched car/track and long sessions still need play testing. Native gamepad support and internet multiplayer are not established by this port.
+Menus and movies retain their source artwork and aspect ratio. Higher race resolutions do not add detail to that artwork. Menus, driving, sound and intro playback have been exercised; complete career progression, every patched car/track and long sessions still need play testing. Internet multiplayer is not established by this port, and game controllers have no force feedback.
 
 ## Legal and notices
 

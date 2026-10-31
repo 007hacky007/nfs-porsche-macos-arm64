@@ -3,6 +3,7 @@
 #include "input.h"
 #include "audio.h"
 #include "render.h"
+#include "gamepad.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -181,6 +182,60 @@ int main(void){
     objectargs[2]=8;assert(method(mouse,14,4,objectargs)==0&&(MR32(0xc0e018)&3)==1);
     objectargs[2]=100;assert(method(mouse,14,4,objectargs)==0x80070002);
     assert(method(mouse,2,1,&mouse)==0);
+    /* The virtual game pad is a DirectInput 5 gamepad after the keyboard and mouse. */
+    memset(g_mem+0xc0c000,0,0x1000);
+    uint32_t pad_guid=0xc0c100;
+    extern uint32_t joystick_device_instance(uint32_t);
+    MR32(0xc0c000)=580;assert(joystick_device_instance(0xc0c000)==0&&MR32(0xc0c024)==0x10404);
+    assert(!strcmp((char *)g_mem+0xc0c028,"Game Controller"));
+    memcpy(g_mem+pad_guid,g_mem+0xc0c004,16);
+    uint32_t padcreate[]={di,pad_guid,0xc0c200,0};
+    assert(method(di,3,4,padcreate)==0);uint32_t pad=MR32(0xc0c200);assert(pad);
+    MR32(0xc0c300)=44;uint32_t capsargs[]={pad,0xc0c300};
+    assert(method(pad,3,2,capsargs)==0&&MR32(0xc0c304)==1&&(MR32(0xc0c308)&0xff)==4);
+    assert(MR32(0xc0c30c)==5&&MR32(0xc0c310)==10&&MR32(0xc0c314)==1);
+    MR32(0xc0c400)=316;uint32_t padobject[]={pad,0xc0c400,0x30,1};
+    assert(method(pad,14,4,padobject)==0&&(MR32(0xc0c418)&0xff)==4);
+    padobject[2]=0x39;assert(method(pad,14,4,padobject)==0);
+    padobject[2]=0x3a;assert(method(pad,14,4,padobject)==0x80070002);
+    padobject[2]=0x10;assert(method(pad,14,4,padobject)==0&&MR32(0xc0c418)==(2|4u<<8));
+    padobject[2]=0x14;assert(method(pad,14,4,padobject)==0x80070002);
+    padobject[2]=0x20;assert(method(pad,14,4,padobject)==0&&(MR32(0xc0c418)&0xff)==0x10);
+    padobject[2]=0x24;assert(method(pad,14,4,padobject)==0x80070002);
+    uint32_t padstate[]={pad,0x50,0xc0c600};
+    assert(method(pad,9,3,padstate)==0x8007000c);
+    assert(method(pad,7,1,&pad)==0&&method(pad,25,1,&pad)==0);
+    assert(method(pad,9,3,padstate)==0);
+    assert(MR32(0xc0c600)==32768&&MR32(0xc0c604)==32768&&MR32(0xc0c608)==32768&&MR32(0xc0c614)==0);
+    assert(MR32(0xc0c620)==0xffffffffu&&MR8(0xc0c630)==0);
+    gamepad_synth_axis(PAD_AXIS_LX,-1.f);gamepad_synth_axis(PAD_AXIS_RY,1.f);gamepad_synth_axis(PAD_AXIS_RT,1.f);
+    gamepad_synth_button(PAD_A,1);gamepad_synth_button(PAD_DUP,1);gamepad_synth_button(PAD_DRIGHT,1);
+    assert(method(pad,9,3,padstate)==0);
+    /* The right trigger pulls the shared trigger axis Y up, the left trigger down. */
+    assert(MR32(0xc0c600)==0&&MR32(0xc0c604)==0&&MR32(0xc0c610)==65535&&MR32(0xc0c614)==0);
+    gamepad_synth_axis(PAD_AXIS_LT,1.f);assert(method(pad,9,3,padstate)==0&&MR32(0xc0c604)==32768);
+    gamepad_synth_axis(PAD_AXIS_RT,0.f);assert(method(pad,9,3,padstate)==0&&MR32(0xc0c604)==65535);
+    gamepad_synth_axis(PAD_AXIS_LT,0.f);gamepad_synth_button(PAD_RB,1);
+    assert(method(pad,9,3,padstate)==0&&MR8(0xc0c637)==0x80);gamepad_synth_button(PAD_RB,0);
+    assert(MR32(0xc0c620)==4500&&MR8(0xc0c630)==0x80&&MR8(0xc0c631)==0);
+    /* A small stick movement stays inside the default dead zone. */
+    gamepad_synth_axis(PAD_AXIS_LX,0.05f);
+    assert(method(pad,9,3,padstate)==0&&MR32(0xc0c600)==32768);
+    MR32(0xc0c700)=24;MR32(0xc0c704)=16;MR32(0xc0c708)=0;MR32(0xc0c70c)=0;
+    MR32(0xc0c710)=(uint32_t)-1000;MR32(0xc0c714)=1000;
+    uint32_t rangeargs[]={pad,4,0xc0c700};assert(method(pad,6,3,rangeargs)==0);
+    gamepad_synth_axis(PAD_AXIS_LX,1.f);
+    assert(method(pad,9,3,padstate)==0&&MR32(0xc0c600)==1000&&MR32(0xc0c604)==0);
+    MR32(0xc0c708)=8;MR32(0xc0c70c)=1;MR32(0xc0c710)=0;MR32(0xc0c714)=0;
+    assert(method(pad,5,3,rangeargs)==0&&(int32_t)MR32(0xc0c710)==-1000&&MR32(0xc0c714)==1000);
+    MR32(0xc0c700)=20;MR32(0xc0c708)=0;MR32(0xc0c70c)=0;
+    uint32_t gainargs[]={pad,7,0xc0c700};assert(method(pad,6,3,gainargs)==0x80004001);
+    uint32_t effectargs[]={pad,0xc0c800,0xc0c900,0xc0ca00,0};MR32(0xc0ca00)=1;
+    assert(method(pad,18,5,effectargs)==0x80004001&&MR32(0xc0ca00)==0);
+    uint32_t commandargs[]={pad,1};assert(method(pad,22,2,commandargs)==0x80004001);
+    gamepad_synth_connect(0);
+    assert(method(pad,9,3,padstate)==0&&MR32(0xc0c600)==0&&MR8(0xc0c630)==0&&MR32(0xc0c620)==0xffffffffu);
+    assert(method(pad,8,1,&pad)==0&&method(pad,2,1,&pad)==0);
     strcpy((char *)g_mem+0xc07000,"c:\\NfSv\\Data");
     uint32_t uppercase=0xc07000;
     assert(api("CharUpperA",1,&uppercase)==0xc07000);

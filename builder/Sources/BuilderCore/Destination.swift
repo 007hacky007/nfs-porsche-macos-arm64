@@ -4,6 +4,8 @@ public let defaultDestination = URL(fileURLWithPath: "/Applications")
 
 struct InstallError: LocalizedError {
     let message: String
+    /// Underlying error text, for the log.
+    var details: String? = nil
     var errorDescription: String? { message }
 }
 
@@ -22,18 +24,24 @@ public func installApp(_ built: URL, into directory: URL, isRunning: () -> Bool)
     let fm = FileManager.default
     let target = directory.appendingPathComponent("NFSV.app")
     let staging = directory.appendingPathComponent(".NFSV.app.installing")
-    if fm.fileExists(atPath: staging.path) { try fm.removeItem(at: staging) }
     do {
+        if fm.fileExists(atPath: staging.path) { try fm.removeItem(at: staging) }
         try fm.copyItem(at: built, to: staging)
         try removeQuarantine(at: staging)
+        var final = target
         if fm.fileExists(atPath: target.path) {
-            _ = try fm.replaceItemAt(target, withItemAt: staging)
+            final = try fm.replaceItemAt(target, withItemAt: staging) ?? target
         } else {
             try fm.moveItem(at: staging, to: target)
         }
+        guard fm.fileExists(atPath: final.appendingPathComponent("Contents/Info.plist").path) else {
+            throw InstallError(message: "The installed app is incomplete.")
+        }
+        return final
     } catch {
         try? fm.removeItem(at: staging)
-        throw error
+        throw InstallError(
+            message: "Could not install NFSV into \(directory.lastPathComponent). Choose another folder and try again.",
+            details: String(describing: error))
     }
-    return target
 }

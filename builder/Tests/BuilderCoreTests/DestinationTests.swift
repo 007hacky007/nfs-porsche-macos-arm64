@@ -16,6 +16,7 @@ final class DestinationTests: XCTestCase {
 
     private func makeApp(at url: URL, marker: String) throws {
         try FileManager.default.createDirectory(at: url.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        try "plist".write(to: url.appendingPathComponent("Contents/Info.plist"), atomically: true, encoding: .utf8)
         try marker.write(to: url.appendingPathComponent("Contents/marker"), atomically: true, encoding: .utf8)
     }
 
@@ -63,6 +64,19 @@ final class DestinationTests: XCTestCase {
         XCTAssertThrowsError(try installApp(missing, into: dest, isRunning: { false }))
         XCTAssertEqual(try marker(dest.appendingPathComponent("NFSV.app")), "old")
         XCTAssertFalse(FileManager.default.fileExists(atPath: dest.appendingPathComponent(".NFSV.app.installing").path))
+    }
+
+    func testStagingFailureGivesPlainErrorAndKeepsOldApp() throws {
+        let dest = root.appendingPathComponent("dest")
+        try makeApp(at: dest.appendingPathComponent("NFSV.app"), marker: "old")
+        let built = root.appendingPathComponent("built/NFSV.app")
+        try makeApp(at: built, marker: "new")
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dest.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dest.path) }
+        XCTAssertThrowsError(try installApp(built, into: dest, isRunning: { false })) { error in
+            XCTAssertEqual(error.localizedDescription, "Could not install NFSV into dest. Choose another folder and try again.")
+        }
+        XCTAssertEqual(try marker(dest.appendingPathComponent("NFSV.app")), "old")
     }
 
     func testUnwritableDestinationIsRed() throws {

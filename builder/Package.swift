@@ -1,0 +1,12 @@
+// swift-tools-version:5.9
+import PackageDescription
+
+let package = Package(
+    name: "NFSVBuilder",
+    platforms: [.macOS(.v11)],
+    targets: [
+        .target(name: "BuilderCore"),
+        .executableTarget(name: "NFSVBuilder", dependencies: ["BuilderCore"]),
+        .testTarget(name: "BuilderCoreTests", dependencies: ["BuilderCore"]),
+    ]
+)

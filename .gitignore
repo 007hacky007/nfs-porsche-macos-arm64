@@ -50,3 +50,5 @@ __pycache__/
 *.ISO
 *.BIN
 *.CUE
+/builder/.build/
+/builder/.swiftpm/

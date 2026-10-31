@@ -18,6 +18,8 @@
      NFSV_PAD=0                    no game controller device at all
      NFSV_PAD_DEADZONE=<f>         radial stick dead zone (default 0.08)
      NFSV_PAD_TRIGGER_DEADZONE=<f> trigger dead zone (default 0.02)
+     NFSV_PAD_SENSITIVITY=<n>      stick sensitivity in percent, 25..200
+                                   (default 100, linear; the launcher's slider)
      NFSV_PAD_RUMBLE=0             no vibration
      NFSV_PAD_LOG=1                log controllers connecting and disconnecting */
 #import <Cocoa/Cocoa.h>
@@ -42,7 +44,7 @@ static float rumble_target[2];        /* under the lock */
 static uint64_t rumble_time;          /* when force.c last set them, under the lock */
 /* Haptics, on the queue only. */
 static CHHapticEngine *engines[2];
-static id<CHHapticAdvancedPatternPlayer> players[2];
+static id<CHHapticPatternPlayer> players[2];
 static float applied[2];
 static unsigned motor_count;
 static dispatch_source_t rumble_timer;
@@ -72,14 +74,17 @@ int gamepad_rumble_enabled(void){
 static uint64_t now_ms(void){ return clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1000000u; }
 
 /* ---- rumble (queue) ---- */
-static id<CHHapticAdvancedPatternPlayer> make_player(CHHapticEngine *engine){
+/* A basic player: the controller haptics service (gamecontrollerd) refuses
+   advanced players with "Couldn't communicate with a helper application",
+   but basic ones accept live intensity changes too. */
+static id<CHHapticPatternPlayer> make_player(CHHapticEngine *engine){
     NSError *error = nil;
     CHHapticEventParameter *intensity = [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity value:1.f];
     CHHapticEventParameter *sharpness = [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticSharpness value:0.5f];
     CHHapticEvent *event = [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticContinuous
                                                          parameters:@[intensity, sharpness] relativeTime:0 duration:GCHapticDurationInfinite];
     CHHapticPattern *pattern = [[CHHapticPattern alloc] initWithEvents:@[event] parameters:@[] error:&error];
-    id<CHHapticAdvancedPatternPlayer> player = pattern ? [engine createAdvancedPlayerWithPattern:pattern error:&error] : nil;
+    id<CHHapticPatternPlayer> player = pattern ? [engine createPlayerWithPattern:pattern error:&error] : nil;
     if (!player) fprintf(stderr, "controller vibration unavailable: %s\n", error.localizedDescription.UTF8String ?: "?");
     return player;
 }
@@ -269,14 +274,27 @@ static void stick_deadzone(float *x, float *y, float zone){
     *x = fmaxf(-1.f, fminf(1.f, *x * k));
     *y = fmaxf(-1.f, fminf(1.f, *y * k));
 }
+float gamepad_stick_curve(float r, float s){
+    if (r <= 0.f) return 0.f;
+    if (r >= 1.f) r = 1.f;
+    return s < 1.f ? r * (s + (1.f - s) * r * r) : fminf(1.f, r * s);
+}
+static void stick_response(float *x, float *y, float s){
+    float r = sqrtf(*x * *x + *y * *y);
+    if (r <= 0.f || s == 1.f) return;
+    float k = gamepad_stick_curve(r, s) / r;
+    *x = fmaxf(-1.f, fminf(1.f, *x * k));
+    *y = fmaxf(-1.f, fminf(1.f, *y * k));
+}
 static float trigger_deadzone(float v, float zone){
     if (v <= zone) return 0.f;
     return v >= 1.f ? 1.f : (v - zone) / (1.f - zone);
 }
 
 int gamepad_read(PadState *state){
-    static float zone = -1.f, trigger_zone;
+    static float zone = -1.f, trigger_zone, sensitivity;
     if (zone < 0.f){
+        sensitivity = env_float("NFSV_PAD_SENSITIVITY", 100.f, 25.f, 200.f) / 100.f;
         trigger_zone = env_float("NFSV_PAD_TRIGGER_DEADZONE", 0.02f, 0.f, 0.9f);
         zone = env_float("NFSV_PAD_DEADZONE", 0.08f, 0.f, 0.9f);
     }
@@ -287,6 +305,8 @@ int gamepad_read(PadState *state){
     if (neutral){ state->buttons = 0; memset(state->axis, 0, sizeof state->axis); }
     stick_deadzone(&state->axis[PAD_AXIS_LX], &state->axis[PAD_AXIS_LY], zone);
     stick_deadzone(&state->axis[PAD_AXIS_RX], &state->axis[PAD_AXIS_RY], zone);
+    stick_response(&state->axis[PAD_AXIS_LX], &state->axis[PAD_AXIS_LY], sensitivity);
+    stick_response(&state->axis[PAD_AXIS_RX], &state->axis[PAD_AXIS_RY], sensitivity);
     state->axis[PAD_AXIS_LT] = trigger_deadzone(state->axis[PAD_AXIS_LT], trigger_zone);
     state->axis[PAD_AXIS_RT] = trigger_deadzone(state->axis[PAD_AXIS_RT], trigger_zone);
     return state->connected;

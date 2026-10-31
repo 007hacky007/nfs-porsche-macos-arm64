@@ -30,6 +30,10 @@ int gamepad_enabled(void);
 void gamepad_init(void);
 /* The pad after dead zones, neutral while the game is not the active app. */
 int gamepad_read(PadState *state);
+/* Stick response at radial deflection r (0..1) for sensitivity s
+   (NFSV_PAD_SENSITIVITY / 100): below 1 a gentler centre, full output still
+   at full deflection; above 1 full output before the edge. */
+float gamepad_stick_curve(float r, float s);
 /* 0 when NFSV_PAD_RUMBLE is 0, off, no or false (the launcher's switch). */
 int gamepad_rumble_enabled(void);
 /* Motor levels 0..1: strong is the heavy low-frequency motor (left), weak

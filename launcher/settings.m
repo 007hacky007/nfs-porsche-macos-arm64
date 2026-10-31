@@ -10,6 +10,11 @@ static NSInteger hud_scale_setting(NSUserDefaults *defaults){
     double percent=[value isKindOfClass:NSNumber.class]?[value doubleValue]:100;
     return isfinite(percent)&&percent>=25&&percent<=100?lround(percent):100;
 }
+static NSInteger stick_sensitivity_setting(NSUserDefaults *defaults){
+    id value=[defaults objectForKey:@"LaunchStickSensitivity"];
+    double percent=[value isKindOfClass:NSNumber.class]?[value doubleValue]:100;
+    return isfinite(percent)&&percent>=25&&percent<=200?lround(percent):100;
+}
 NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inherited){
     NSMutableDictionary *environment=[inherited mutableCopy];
     [environment removeObjectsForKeys:@[@"NFSV_RESOLUTION",@"NFSV_FPS_LIMIT"]];
@@ -23,11 +28,17 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
     environment[@"NFSV_ENHANCED_GRAPHICS"]=boolean_setting(defaults,@"LaunchEnhancedGraphics",YES)?@"1":@"0";
     environment[@"NFSV_PAD_RUMBLE"]=boolean_setting(defaults,@"LaunchControllerVibration",YES)?@"1":@"0";
     environment[@"NFSV_HUD_SCALE"]=[@(hud_scale_setting(defaults)) stringValue];
+    environment[@"NFSV_PAD_SENSITIVITY"]=[@(stick_sensitivity_setting(defaults)) stringValue];
     return environment;
 }
 
 @implementation NFSVLaunchSettingsView{
-    NSTextField *hudSizeValue;
+    NSTextField *hudSizeValue,*stickSensitivityValue;
+}
+- (void)updateStickSensitivity:(id)sender{
+    (void)sender;self.stickSensitivity.integerValue=lround(self.stickSensitivity.doubleValue/5)*5;
+    stickSensitivityValue.stringValue=[NSString stringWithFormat:@"%ld%%",(long)self.stickSensitivity.integerValue];
+    self.stickSensitivity.accessibilityValueDescription=stickSensitivityValue.stringValue;
 }
 - (void)updateHUDSize:(id)sender{
     (void)sender;self.hudScale.integerValue=lround(self.hudScale.doubleValue);
@@ -35,10 +46,10 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
     self.hudScale.accessibilityValueDescription=hudSizeValue.stringValue;
 }
 - (instancetype)initWithDefaults:(NSUserDefaults *)defaults{
-    if((self=[super initWithFrame:NSMakeRect(0,0,390,284)])){
+    if((self=[super initWithFrame:NSMakeRect(0,0,390,320)])){
         NSDictionary *settings=launcher_environment(defaults,@{});
-        NSTextField *label=[NSTextField labelWithString:@"Race resolution:"];label.frame=NSMakeRect(0,251,140,22);[self addSubview:label];
-        self.resolution=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(145,248,245,28) pullsDown:NO];
+        NSTextField *label=[NSTextField labelWithString:@"Race resolution:"];label.frame=NSMakeRect(0,287,140,22);[self addSubview:label];
+        self.resolution=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(145,284,245,28) pullsDown:NO];
         self.resolution.accessibilityLabel=@"Race resolution";
         [self.resolution addItemWithTitle:@"Use in-game setting"];self.resolution.lastItem.representedObject=@"";
         for(unsigned i=0;i<DISPLAY_MODE_COUNT;i++){
@@ -48,8 +59,8 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
             if([settings[@"NFSV_RESOLUTION"] isEqual:value])[self.resolution selectItem:self.resolution.lastItem];
         }
         [self addSubview:self.resolution];
-        label=[NSTextField labelWithString:@"Frame-rate limit:"];label.frame=NSMakeRect(0,215,140,22);[self addSubview:label];
-        self.frameLimit=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(145,212,245,28) pullsDown:NO];
+        label=[NSTextField labelWithString:@"Frame-rate limit:"];label.frame=NSMakeRect(0,251,140,22);[self addSubview:label];
+        self.frameLimit=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(145,248,245,28) pullsDown:NO];
         self.frameLimit.accessibilityLabel=@"Frame-rate limit";
         for(NSNumber *limit in @[@0,@30,@60,@120]){
             [self.frameLimit addItemWithTitle:limit.intValue?[NSString stringWithFormat:@"%@ FPS",limit]:@"Game default"];
@@ -57,14 +68,22 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
             if([settings[@"NFSV_FPS_LIMIT"] intValue]==limit.intValue)[self.frameLimit selectItem:self.frameLimit.lastItem];
         }
         [self addSubview:self.frameLimit];
-        label=[NSTextField labelWithString:@"HUD size:"];label.frame=NSMakeRect(0,179,140,22);[self addSubview:label];
+        label=[NSTextField labelWithString:@"HUD size:"];label.frame=NSMakeRect(0,215,140,22);[self addSubview:label];
         self.hudScale=[NSSlider sliderWithValue:[settings[@"NFSV_HUD_SCALE"] doubleValue] minValue:25 maxValue:100 target:self action:@selector(updateHUDSize:)];
-        self.hudScale.frame=NSMakeRect(145,177,185,24);self.hudScale.continuous=YES;
+        self.hudScale.frame=NSMakeRect(145,213,185,24);self.hudScale.continuous=YES;
         self.hudScale.accessibilityLabel=@"HUD size";
         self.hudScale.toolTip=@"Percentage of the resolution-scaled HUD size. Never smaller than the original HUD.";
         [self addSubview:self.hudScale];
-        hudSizeValue=[NSTextField labelWithString:@""];hudSizeValue.frame=NSMakeRect(335,179,55,22);
+        hudSizeValue=[NSTextField labelWithString:@""];hudSizeValue.frame=NSMakeRect(335,215,55,22);
         hudSizeValue.alignment=NSTextAlignmentRight;[self addSubview:hudSizeValue];[self updateHUDSize:nil];
+        label=[NSTextField labelWithString:@"Stick sensitivity:"];label.frame=NSMakeRect(0,179,140,22);[self addSubview:label];
+        self.stickSensitivity=[NSSlider sliderWithValue:[settings[@"NFSV_PAD_SENSITIVITY"] doubleValue] minValue:25 maxValue:200 target:self action:@selector(updateStickSensitivity:)];
+        self.stickSensitivity.frame=NSMakeRect(145,177,185,24);self.stickSensitivity.continuous=YES;
+        self.stickSensitivity.accessibilityLabel=@"Stick sensitivity";
+        self.stickSensitivity.toolTip=@"Game controller sticks. 100% is linear. Lower values steer more gently around the centre and still reach full lock at full stick; higher values reach full lock before the edge.";
+        [self addSubview:self.stickSensitivity];
+        stickSensitivityValue=[NSTextField labelWithString:@""];stickSensitivityValue.frame=NSMakeRect(335,179,55,22);
+        stickSensitivityValue.alignment=NSTextAlignmentRight;[self addSubview:stickSensitivityValue];[self updateStickSensitivity:nil];
         self.fullscreen=[NSButton checkboxWithTitle:@"Start in fullscreen" target:nil action:nil];self.fullscreen.frame=NSMakeRect(0,141,390,24);
         self.fullscreen.state=[settings[@"NFSV_FULLSCREEN"] boolValue]?NSControlStateValueOn:NSControlStateValueOff;[self addSubview:self.fullscreen];
         self.hideCursor=[NSButton checkboxWithTitle:@"Hide macOS cursor while playing" target:nil action:nil];self.hideCursor.frame=NSMakeRect(0,111,390,24);
@@ -85,6 +104,7 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
     [defaults setObject:self.resolution.selectedItem.representedObject forKey:@"LaunchResolution"];
     [defaults setObject:self.frameLimit.selectedItem.representedObject forKey:@"LaunchFrameLimit"];
     [defaults setInteger:self.hudScale.integerValue forKey:@"LaunchHUDScale"];
+    [defaults setInteger:self.stickSensitivity.integerValue forKey:@"LaunchStickSensitivity"];
     [defaults setBool:self.fullscreen.state==NSControlStateValueOn forKey:@"LaunchFullscreen"];
     [defaults setBool:self.hideCursor.state==NSControlStateValueOn forKey:@"LaunchHideCursor"];
     [defaults setBool:self.enhancedGraphics.state==NSControlStateValueOn forKey:@"LaunchEnhancedGraphics"];

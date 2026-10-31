@@ -218,6 +218,11 @@ int main(void){
     gamepad_synth_axis(PAD_AXIS_LT,0.f);gamepad_synth_button(PAD_RB,1);
     assert(method(pad,9,3,padstate)==0&&MR8(0xc0c637)==0x80);gamepad_synth_button(PAD_RB,0);
     assert(MR32(0xc0c620)==4500&&MR8(0xc0c630)==0x80&&MR8(0xc0c631)==0);
+    /* Stick sensitivity: 100% linear, lower gentler around the centre with full
+       output at full stick, higher reaching full output early. */
+    assert(gamepad_stick_curve(0.5f,1.f)==0.5f&&gamepad_stick_curve(1.f,0.5f)==1.f);
+    assert(fabsf(gamepad_stick_curve(0.5f,0.5f)-0.3125f)<1e-5f&&gamepad_stick_curve(0.f,0.25f)==0.f);
+    assert(gamepad_stick_curve(0.5f,2.f)==1.f&&fabsf(gamepad_stick_curve(0.25f,2.f)-0.5f)<1e-6f);
     /* A small stick movement stays inside the default dead zone. */
     gamepad_synth_axis(PAD_AXIS_LX,0.05f);
     assert(method(pad,9,3,padstate)==0&&MR32(0xc0c600)==32768);

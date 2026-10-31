@@ -3,6 +3,7 @@
 @property(nonatomic,strong) NSPopUpButton *resolution;
 @property(nonatomic,strong) NSPopUpButton *frameLimit;
 @property(nonatomic,strong) NSSlider *hudScale;
+@property(nonatomic,strong) NSSlider *stickSensitivity;
 @property(nonatomic,strong) NSButton *fullscreen;
 @property(nonatomic,strong) NSButton *hideCursor;
 @property(nonatomic,strong) NSButton *enhancedGraphics;

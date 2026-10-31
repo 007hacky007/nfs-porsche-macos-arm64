@@ -72,6 +72,7 @@ Open NFSV.app. The launcher appears first:
 - **Start in fullscreen**, or play in a window. Fullscreen is the initial default.
 - **Frame-rate limit**: game default, 30, 60 or 120 FPS. This is a cap; the game and display can run slower.
 - **HUD size**: try 75% for a smaller HUD in 4K; 100% keeps the full automatic size.
+- **Stick sensitivity**: how a game controller's sticks respond. See [Game controllers](#game-controllers).
 - **Hide macOS cursor while playing**: on by default.
 - **Enhanced graphics**: smoother edges and sharper textures, on by default. Turn it off for the original look or a higher frame rate on older Macs.
 - **Controller vibration**: plays the game's force feedback on a game controller, on by default.
@@ -96,7 +97,7 @@ In the game, open **options... > controllers > game controls**, set **default co
 | Cameras | Share / View | Button 6 |
 | Shift up, down | R1 / RB, L1 / LB | Button 8, Button 9 |
 
-Any control can be rebound on the same screen: click it, then press a button or move a stick or trigger. The other buttons are Circle / B (Button 2), Options / Menu (Button 5), the left stick button (Button 7) and the right stick button (Button 10). The left stick's vertical movement is the z axis, the right stick is the x and y rotation axes, and the D-pad is the hat switch. The triggers share one axis, as Xbox pads do under DirectInput on Windows, so pressing both at once cancels out. The **deadzone** tab adjusts each axis.
+Any control can be rebound on the same screen: click it, then press a button or move a stick or trigger. The other buttons are Circle / B (Button 2), Options / Menu (Button 5), the left stick button (Button 7) and the right stick button (Button 10). The left stick's vertical movement is the z axis, the right stick is the x and y rotation axes, and the D-pad is the hat switch. The triggers share one axis, as Xbox pads do under DirectInput on Windows, so pressing both at once cancels out. The **deadzone** tab adjusts each axis. The game has no sensitivity setting, so the launcher has **Stick sensitivity**. At 100% the sticks are linear. Lower values steer more gently around the center and still give full lock at full stick, which helps with small corrections at speed. Higher values reach full lock before the stick reaches its edge. The triggers are not affected.
 
 **Vibration** plays the game's own force feedback on the controller's motors: collisions and hard landings on the heavy motor, the road surface and the engine on the light one. The game's **force feedback** tab sets the strength: **stick volume** for everything, then **collision**, **road effects** and **engine** (set **engine** to 0% to drop the idle buzz). **Road grip** is a steering-wheel force with nothing to vibrate on a pad. Vibration needs macOS 11 or newer and a controller with motors that macOS supports, such as DualShock 4, DualSense and Xbox controllers. Turn it off with **Controller vibration** in the launcher.
 
@@ -163,7 +164,7 @@ If a checksum fails, use a complete, unmodified supported copy. Renaming an unsu
 
 ## Launcher settings
 
-The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, macOS cursor visibility, enhanced graphics and controller vibration. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
+The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, game controller stick sensitivity, macOS cursor visibility, enhanced graphics and controller vibration. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
 
 - **HUD size** ranges from 25% to 100% of the automatic resolution scaling, with the original HUD size as a minimum. Try 75% for a smaller HUD in 4K; 100% keeps the full automatic size.
 - **Use in-game setting** lets the game's graphics menu control race resolution; choosing a specific launcher resolution overrides that setting for the session and selects 32-bit color when available. Menus and movies keep their original resolution.

@@ -105,5 +105,27 @@ struct RootView: View {
         .padding(20)
         .frame(width: 560)
         .frame(minHeight: 470, alignment: .top)
+        .background(GrowWindowToFit(content: "\(model.states)\(model.gameDetails ?? "")"))
+    }
+}
+
+/// Grows the window when its content no longer fits, for example when a checklist message
+/// wraps after a check finishes; SwiftUI does not enlarge a window that is already open.
+/// `content` only changes when the layout may have, which makes SwiftUI call the update.
+struct GrowWindowToFit: NSViewRepresentable {
+    let content: String
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let window = view.window, let root = window.contentView else { return }
+            let missing = root.fittingSize.height - root.frame.height
+            guard missing > 0.5 else { return }
+            var frame = window.frame
+            frame.origin.y -= missing
+            frame.size.height += missing
+            window.setFrame(frame, display: true, animate: true)
+        }
     }
 }

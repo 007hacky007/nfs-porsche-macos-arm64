@@ -8,13 +8,18 @@ Build your own macOS version of **Need for Speed: Porsche Unleashed** with nativ
 
 NFSV Builder is a small app that installs what is missing and builds NFSV.app from your own game copy. It needs an Apple Silicon Mac with **macOS 12 or newer**. On macOS 11, use [Build from Terminal](#build-from-terminal) instead.
 
-1. Download `NFSV-Builder.dmg` from the Releases page of this repository and open it.
-2. Run **NFSV Builder** from the opened disk. You do not need to copy it anywhere.
+1. Download `NFSV-Builder.dmg` from the [Releases page](../../releases/latest) of this repository and open it. You do not need to copy NFSV Builder anywhere.
+
+**On macOS 14 or older:** right-click **NFSV Builder** and choose **Open**.
+
+**macOS 15 or newer:**
+
+2. Run **NFSV Builder** from the opened disk.
 3. macOS says it cannot be opened. Click **Done**.
 4. Open **System Settings**, then **Privacy & Security**, and scroll down.
 5. Click **Open Anyway**.
 
-On macOS 14 or older, right-click **NFSV Builder** and choose **Open** instead. NFSV Builder is free and open source but not signed by Apple, so macOS asks once. The same steps are drawn on the disk's background.
+NFSV Builder is free and open source but not signed by Apple, so macOS asks once. The same steps are drawn on the disk's background.
 
 The Builder shows a checklist:
 

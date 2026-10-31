@@ -64,6 +64,20 @@ class BuildAppTests(unittest.TestCase):
         events = [json.loads(l[len('NFSV-EVENT '):]) for l in run.stdout.splitlines() if l.startswith('NFSV-EVENT ')]
         self.assertEqual(events[-1], {'error': 'game copy does not exist'})
 
+    def test_progress_mode_shows_plain_message_for_failed_step(self):
+        from unittest.mock import patch
+        def failing():
+            build_app.PROGRESS = True
+            subprocess.run([sys.executable, '-c', 'import sys; sys.exit(3)'], check=True)
+        self.addCleanup(setattr, build_app, 'PROGRESS', build_app.PROGRESS)
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(build_app, 'main', failing), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertEqual(build_app.cli(), 1)
+        events = [json.loads(l[len('NFSV-EVENT '):]) for l in out.getvalue().splitlines() if l.startswith('NFSV-EVENT ')]
+        self.assertEqual(events, [{'error': 'This step stopped with an error. Click Copy log and include it in a bug report.'}])
+        self.assertIn('sys.exit(3)', err.getvalue())
+        self.assertIn('exit status 3', err.getvalue())
+
     def test_step_emits_event_only_in_progress_mode(self):
         for progress in (False, True):
             self.addCleanup(setattr, build_app, 'PROGRESS', build_app.PROGRESS)

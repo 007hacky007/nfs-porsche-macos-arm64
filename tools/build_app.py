@@ -20,6 +20,7 @@ from tools.game_source import assets_digest, file_sha256, game_files, verify_gam
 
 
 PROGRESS = False
+STEP_FAILED = 'This step stopped with an error. Click Copy log and include it in a bug report.'
 
 
 def emit(event):
@@ -171,11 +172,16 @@ def main():
         emit({'done': str(ROOT / 'out/NFSV.app')})
 
 
-if __name__ == '__main__':
+def cli():
     try:
         main()
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
-        print(f'Build failed: {error}', file=sys.stderr)
+        print(f'Build failed: {error}', file=sys.stderr, flush=True)
         if PROGRESS:
-            emit({'error': str(error)})
-        sys.exit(1)
+            emit({'error': STEP_FAILED if isinstance(error, subprocess.CalledProcessError) else str(error)})
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(cli())

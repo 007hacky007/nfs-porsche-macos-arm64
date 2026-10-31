@@ -88,6 +88,20 @@ private func removePycache(in root: URL) throws {
     for url in found { try fm.removeItem(at: url) }
 }
 
+/// Deletes workspaces of other Builder versions: visible siblings in the support folder whose
+/// `.builder-version` marker names a different version. The private Python and directories
+/// without a marker are never touched.
+public func removeOldWorkspaces(_ paths: BuilderPaths, keeping version: String) {
+    let fm = FileManager.default
+    for name in (try? fm.contentsOfDirectory(atPath: paths.support.path)) ?? []
+    where !name.hasPrefix(".") && name != paths.python.lastPathComponent && name != version {
+        let dir = paths.support.appendingPathComponent(name)
+        guard let marker = try? String(contentsOf: dir.appendingPathComponent(versionMarker), encoding: .utf8),
+              marker != version, let trash = try? moveToTrash(dir) else { continue }
+        try? fm.removeItem(at: trash)
+    }
+}
+
 /// Ready when the private Python is installed and the workspace venv was built from the
 /// current requirements.txt. Otherwise red: roughly 90 MB (Python archive plus packages) to fetch.
 public func buildToolsCheck(paths: BuilderPaths, version: String) -> CheckState {

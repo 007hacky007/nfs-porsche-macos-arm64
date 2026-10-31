@@ -108,6 +108,17 @@ final class EnvironmentTests: XCTestCase {
         XCTAssertEqual(read(paths.pythonExecutable), "x")
     }
 
+    func testOldVersionWorkspacesAreRemoved() throws {
+        let paths = BuilderPaths(support: tmp)
+        try write("0.9", to: tmp.appendingPathComponent("0.9/.builder-version"))
+        try write("x", to: tmp.appendingPathComponent("0.9/tools/a.py"))
+        try write("1.0", to: tmp.appendingPathComponent("1.0/.builder-version"))
+        try write("x", to: tmp.appendingPathComponent("notes/a.txt"))
+        try write("x", to: paths.pythonExecutable)
+        removeOldWorkspaces(paths, keeping: "1.0")
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: tmp.path).sorted(), ["1.0", "notes", "python"])
+    }
+
     func testMoveToTrashRenamesToHiddenSibling() throws {
         let dir = tmp.appendingPathComponent("1.0")
         try write("x", to: dir.appendingPathComponent("tools/a.py"))

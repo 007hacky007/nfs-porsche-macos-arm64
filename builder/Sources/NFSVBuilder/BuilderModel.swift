@@ -203,7 +203,7 @@ final class BuilderModel: ObservableObject {
     // MARK: - Build tools
 
     /// `sweep` (only on start, when nothing else uses the support folder) first deletes what an
-    /// interrupted removal or copy left behind.
+    /// interrupted removal or copy left behind and, once the workspace is ready, old versions.
     private func prepare(sweep: Bool = false, _ completion: @escaping (Bool) -> Void) {
         if workspaceReady { return completion(true) }
         guard let sources = sources else {
@@ -216,6 +216,9 @@ final class BuilderModel: ObservableObject {
             if sweep { sweepLeftovers(paths) }
             let result = Result {
                 try prepareWorkspace(sources: sources, destination: paths.workspace(version: version), version: version)
+            }
+            if sweep, case .success = result {
+                DispatchQueue.global(qos: .utility).async { removeOldWorkspaces(paths, keeping: version) }
             }
             DispatchQueue.main.async { [self] in
                 if case let .failure(error) = result {

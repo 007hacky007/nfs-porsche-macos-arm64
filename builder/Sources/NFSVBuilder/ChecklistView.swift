@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 struct ChecklistView: View {
     @ObservedObject var model: BuilderModel
     @State private var dropTargeted = false
-    @State private var showSupported = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -31,7 +30,7 @@ struct ChecklistView: View {
                 .opacity(dropTargeted ? 1 : 0)
         )
         .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted, perform: drop)
-        .sheet(isPresented: $showSupported) { SupportedCopiesView(model: model) }
+        .sheet(isPresented: $model.showingSupported) { SupportedCopiesView(model: model) }
     }
 
     private func buttons(for id: CheckID) -> [RowButton] {
@@ -47,7 +46,7 @@ struct ChecklistView: View {
             return [RowButton(label: "Download", action: model.downloadPatches)]
         case (.gameCopy, .blocked?) where model.gameRejected:
             let details = model.gameDetails.map { text in [RowButton(label: "Copy details", action: { copyToPasteboard(text) })] }
-            return (details ?? []) + [RowButton(label: "Which copy works?", action: { showSupported = true }),
+            return (details ?? []) + [RowButton(label: "Which copy works?", action: { model.showingSupported = true }),
                                       RowButton(label: "Choose...", action: chooseGame)]
         case (.gameCopy, _):
             return [RowButton(label: "Choose...", action: chooseGame)]

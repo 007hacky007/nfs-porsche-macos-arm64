@@ -27,6 +27,8 @@ final class BuilderModel: ObservableObject {
     @Published private(set) var gameRejected = false
     /// The rejection message plus what the check logged (detected checksums), for Copy details.
     @Published private(set) var gameDetails: String?
+    /// Whether the "Which copy works?" sheet is open. Quitting closes it first.
+    @Published var showingSupported = false
     /// The accepted releases for the "Which copy works?" sheet, loaded once from the pipeline.
     @Published private(set) var supported: SupportedCopies?
     @Published private(set) var supportedFailed = false

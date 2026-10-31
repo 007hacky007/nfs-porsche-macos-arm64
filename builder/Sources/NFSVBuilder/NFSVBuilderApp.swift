@@ -15,10 +15,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // pipeline to exit, the runner's main-queue callbacks must still be able to run.
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        source.setEventHandler { RunLoop.main.perform { NSApp.terminate(nil) } }
+        source.setEventHandler { [self] in RunLoop.main.perform { self.quit() } }
         source.resume()
         terminateSignal = source
+        // Quit Apple Events (logout, restart, `osascript ... quit`) take the same path as Cmd-Q.
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleQuit(_:reply:)),
+                                                     forEventClass: AEEventClass(kCoreEventClass),
+                                                     andEventID: AEEventID(kAEQuitApplication))
         model.start()
+    }
+
+    /// NSApp.terminate returns without quitting while a sheet is attached, so close any sheet first.
+    func quit() {
+        model.showingSupported = false
+        for window in NSApp.windows {
+            if let sheet = window.attachedSheet { window.endSheet(sheet) }
+        }
+        RunLoop.main.perform { NSApp.terminate(nil) }
+    }
+
+    @objc private func handleQuit(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+        quit()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -57,6 +74,9 @@ struct NFSVBuilderApp: App {
         }
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .appTermination) {
+                Button("Quit NFSV Builder") { delegate.quit() }.keyboardShortcut("q")
+            }
         }
     }
 }

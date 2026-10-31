@@ -86,6 +86,38 @@ final class EnvironmentTests: XCTestCase {
         XCTAssertEqual(siblings, ["dst", "src"])
     }
 
+    func testWorkspaceWithOnlyMarkerIsCopiedAgain() throws {
+        let src = tmp.appendingPathComponent("src"), dst = tmp.appendingPathComponent("dst")
+        try write("new", to: src.appendingPathComponent("tools/a.py"))
+        try write("x", to: src.appendingPathComponent("build.sh"))
+        try write("1.0", to: dst.appendingPathComponent(".builder-version"))
+        try write("x", to: dst.appendingPathComponent("build.sh"))
+        try prepareWorkspace(sources: src, destination: dst, version: "1.0")
+        XCTAssertEqual(read(dst.appendingPathComponent("tools/a.py")), "new")
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: tmp.path).sorted(), ["dst", "src"])
+    }
+
+    func testSweepRemovesOnlyLeftovers() throws {
+        let paths = BuilderPaths(support: tmp)
+        for name in [".trash-1/tools/a.py", ".1.0.tmp-2/build.sh", ".python.tmp-3/python/bin/python3",
+                     "python/bin/python3", "1.0/.builder-version"] {
+            try write("x", to: tmp.appendingPathComponent(name))
+        }
+        sweepLeftovers(paths)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: tmp.path).sorted(), ["1.0", "python"])
+        XCTAssertEqual(read(paths.pythonExecutable), "x")
+    }
+
+    func testMoveToTrashRenamesToHiddenSibling() throws {
+        let dir = tmp.appendingPathComponent("1.0")
+        try write("x", to: dir.appendingPathComponent("tools/a.py"))
+        let trash = try moveToTrash(dir)
+        XCTAssertFalse(fm.fileExists(atPath: dir.path))
+        XCTAssertTrue(trash.lastPathComponent.hasPrefix(".trash-"))
+        XCTAssertEqual(trash.deletingLastPathComponent().path, tmp.path)
+        XCTAssertEqual(read(trash.appendingPathComponent("tools/a.py")), "x")
+    }
+
     func testWorkspaceCopiesOnlyBundledEntries() throws {
         let src = tmp.appendingPathComponent("repo"), dst = tmp.appendingPathComponent("ws")
         for entry in ["build.sh", "requirements.txt", "tools/a.py", "runtime/r.c", "launcher/l.c",

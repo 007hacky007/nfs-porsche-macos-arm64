@@ -66,7 +66,7 @@ final class BuilderModel: ObservableObject {
 
     func start() {
         refresh()
-        prepare { [self] _ in refreshBuildTools() }
+        prepare(sweep: true) { [self] _ in refreshBuildTools() }
     }
 
     /// Re-evaluates every row. Expensive checks (the game copy) only run again when their input changed.
@@ -202,16 +202,21 @@ final class BuilderModel: ObservableObject {
 
     // MARK: - Build tools
 
-    private func prepare(_ completion: @escaping (Bool) -> Void) {
+    /// `sweep` (only on start, when nothing else uses the support folder) first deletes what an
+    /// interrupted removal or copy left behind.
+    private func prepare(sweep: Bool = false, _ completion: @escaping (Bool) -> Void) {
         if workspaceReady { return completion(true) }
         guard let sources = sources else {
             states[.buildTools] = .blocked("This copy of NFSV Builder is incomplete. Download it again.")
             return completion(false)
         }
         states[.buildTools] = .checking("Preparing build files...")
-        let (destination, version) = (paths.workspace(version: version), version)
+        let (paths, version) = (paths, version)
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = Result { try prepareWorkspace(sources: sources, destination: destination, version: version) }
+            if sweep { sweepLeftovers(paths) }
+            let result = Result {
+                try prepareWorkspace(sources: sources, destination: paths.workspace(version: version), version: version)
+            }
             DispatchQueue.main.async { [self] in
                 if case let .failure(error) = result {
                     states[.buildTools] = .blocked("Could not copy the build files: \(error.localizedDescription)")
@@ -410,14 +415,15 @@ final class BuilderModel: ObservableObject {
         refresh()
     }
 
+    /// The workspace is renamed aside first, so quitting during the slow delete cannot leave a
+    /// marked but incomplete workspace behind; the next start sweeps whatever is left.
     func removeBuildFiles() {
         let workspace = paths.workspace(version: version)
         workspaceReady = false
-        DispatchQueue.global(qos: .utility).async {
-            try? FileManager.default.removeItem(at: workspace)
-            let gone = !FileManager.default.fileExists(atPath: workspace.path)
-            DispatchQueue.main.async { [self] in buildFilesRemoved = gone }
+        if let trash = try? moveToTrash(workspace) {
+            DispatchQueue.global(qos: .utility).async { try? FileManager.default.removeItem(at: trash) }
         }
+        buildFilesRemoved = !FileManager.default.fileExists(atPath: workspace.path)
     }
 
     /// Lines arrive faster than SwiftUI should redraw, so they are published at most four times a second.

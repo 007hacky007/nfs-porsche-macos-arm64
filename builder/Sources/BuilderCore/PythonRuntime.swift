@@ -72,9 +72,8 @@ public enum PythonRuntime {
         }
         try removeQuarantine(at: extracted)
         try expected.write(to: extracted.appendingPathComponent(markerName), atomically: true, encoding: .utf8)
-        if fm.fileExists(atPath: paths.python.path) {
-            try fm.removeItem(at: paths.python)
-        }
+        let previous = fm.fileExists(atPath: paths.python.path) ? try moveToTrash(paths.python) : nil
         try fm.moveItem(at: extracted, to: paths.python)
+        if let previous = previous { try? fm.removeItem(at: previous) }
     }
 }

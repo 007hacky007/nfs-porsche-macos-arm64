@@ -24,12 +24,15 @@ public struct BuilderPaths {
 
 private let versionMarker = ".builder-version"
 
-/// Copies the pipeline sources into `destination`. A destination whose marker
-/// matches `version` is left alone; anything else is replaced atomically.
+/// Copies the pipeline sources into `destination`. A destination whose marker matches
+/// `version` and that holds every bundled entry of `sources` is left alone; anything else is
+/// replaced atomically.
 public func prepareWorkspace(sources: URL, destination: URL, version: String) throws {
     let fm = FileManager.default
     let marker = destination.appendingPathComponent(versionMarker)
-    if let current = try? String(contentsOf: marker, encoding: .utf8), current == version {
+    if let current = try? String(contentsOf: marker, encoding: .utf8), current == version,
+       bundledSourceEntries.allSatisfy({ !fm.fileExists(atPath: sources.appendingPathComponent($0).path)
+           || fm.fileExists(atPath: destination.appendingPathComponent($0).path) }) {
         return
     }
 
@@ -46,13 +49,31 @@ public func prepareWorkspace(sources: URL, destination: URL, version: String) th
         try removePycache(in: temp)
         try removeQuarantine(at: temp)
         try version.write(to: temp.appendingPathComponent(versionMarker), atomically: true, encoding: .utf8)
-        if fm.fileExists(atPath: destination.path) {
-            try fm.removeItem(at: destination)
-        }
+        let old = fm.fileExists(atPath: destination.path) ? try moveToTrash(destination) : nil
         try fm.moveItem(at: temp, to: destination)
+        if let old = old { try? fm.removeItem(at: old) }
     } catch {
         try? fm.removeItem(at: temp)
         throw error
+    }
+}
+
+/// Renames `url` to a hidden `.trash-<uuid>` sibling in one atomic step and returns that
+/// location. A quit while the caller deletes it then never leaves a half-removed directory
+/// under the real name; `sweepLeftovers` deletes the rest on the next start.
+public func moveToTrash(_ url: URL) throws -> URL {
+    let trash = url.deletingLastPathComponent().appendingPathComponent(".trash-\(UUID().uuidString)")
+    try FileManager.default.moveItem(at: url, to: trash)
+    return trash
+}
+
+/// Deletes what interrupted work left in the support folder: `.trash-*` directories and
+/// `.<name>.tmp-*` copies. Called on start, before anything else uses the folder.
+public func sweepLeftovers(_ paths: BuilderPaths) {
+    let fm = FileManager.default
+    for name in (try? fm.contentsOfDirectory(atPath: paths.support.path)) ?? []
+    where name.hasPrefix(".trash-") || (name.hasPrefix(".") && name.contains(".tmp-")) {
+        try? fm.removeItem(at: paths.support.appendingPathComponent(name))
     }
 }
 

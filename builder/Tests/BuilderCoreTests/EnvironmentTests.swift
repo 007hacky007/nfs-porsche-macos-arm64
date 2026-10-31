@@ -39,7 +39,7 @@ final class EnvironmentTests: XCTestCase {
         XCTAssertTrue(clt.state().isReady)
         XCTAssertFalse(runner.calls.contains { $0.contains("xcrun") || $0 == "/usr/bin/clang" })
         let missing = CommandLineTools(runner: RecordingRunner(results: ["/usr/bin/xcode-select": (2, "")]), fileExists: { _ in false })
-        if case .blocked = missing.state() {} else { XCTFail("expected blocked") }
+        XCTAssertEqual(missing.state(), .blocked("Needed to compile the game on your Mac, about 2 GB from Apple"))
     }
 
     func testCLTAcceptsXcodeToolchainAndNeedsCodesign() {
@@ -94,7 +94,13 @@ final class EnvironmentTests: XCTestCase {
             try write("x", to: src.appendingPathComponent(entry))
         }
         XCTAssertEqual(bundledSourceEntries, ["build.sh", "requirements.txt", "tools", "runtime", "launcher", "third_party"])
+        let value = Array("0081;00000000;Test;".utf8)
+        let quarantined = src.appendingPathComponent("tools/a.py")
+        XCTAssertEqual(setxattr(quarantined.path, "com.apple.quarantine", value, value.count, 0, 0), 0)
         try prepareWorkspace(sources: src, destination: dst, version: "2")
+        errno = 0
+        XCTAssertEqual(getxattr(dst.appendingPathComponent("tools/a.py").path, "com.apple.quarantine", nil, 0, 0, 0), -1)
+        XCTAssertEqual(errno, ENOATTR)
         let top = try fm.contentsOfDirectory(atPath: dst.path).sorted()
         XCTAssertEqual(top, [".builder-version", "build.sh", "launcher", "requirements.txt", "runtime", "tools"])
         XCTAssertFalse(fm.fileExists(atPath: dst.appendingPathComponent("tools/__pycache__").path))
@@ -160,22 +166,57 @@ final class EnvironmentTests: XCTestCase {
         let sha = try sha256Hex(of: archive)
         let result = installResult(paths, sha: sha) { _, done in done(.success(archive)) }
         guard case .success = result else { return XCTFail("\(result)") }
-        XCTAssertTrue(PythonRuntime.isInstalled(paths))
         XCTAssertTrue(fm.isExecutableFile(atPath: paths.pythonExecutable.path))
+        XCTAssertEqual(read(paths.python.appendingPathComponent(".nfsv-python-sha256")), sha)
         XCTAssertEqual(try fm.contentsOfDirectory(atPath: support.path), ["python"])
     }
 
-    func testBuildToolsReadyOnlyWhenRequirementsHashMatches() throws {
+    private func fakePython(_ paths: BuilderPaths, marker: String?) throws {
+        try write("#!/bin/sh\n", to: paths.pythonExecutable)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: paths.pythonExecutable.path)
+        if let marker = marker { try write(marker, to: paths.python.appendingPathComponent(".nfsv-python-sha256")) }
+    }
+
+    func testIsInstalledRequiresPinnedMarker() throws {
+        let paths = BuilderPaths(support: tmp)
+        try fakePython(paths, marker: nil)
+        XCTAssertFalse(PythonRuntime.isInstalled(paths))
+        try fakePython(paths, marker: "oldpin")
+        XCTAssertFalse(PythonRuntime.isInstalled(paths))
+        try fakePython(paths, marker: PythonRuntime.sha256)
+        XCTAssertTrue(PythonRuntime.isInstalled(paths))
+    }
+
+    func testBuildToolsBlockedUntilPythonAndVenvMatch() throws {
         let paths = BuilderPaths(support: tmp)
         let ws = paths.workspace(version: "1")
         let req = ws.appendingPathComponent("requirements.txt")
         try write("numpy\n", to: req)
-        if case .automatic = buildToolsCheck(paths: paths, version: "1") {} else { XCTFail("no venv yet") }
         try write("", to: paths.venvPython(version: "1"))
         try write(try sha256Hex(of: req) + "\n", to: ws.appendingPathComponent(".venv/.build-requirements-sha256"))
+        // Venv fine, Python missing.
+        XCTAssertEqual(buildToolsCheck(paths: paths, version: "1"), .blocked("about 90 MB download"))
+        try fakePython(paths, marker: PythonRuntime.sha256)
         XCTAssertTrue(buildToolsCheck(paths: paths, version: "1").isReady)
+        // Python present, hash mismatch.
         try write("numpy\nscipy\n", to: req)
-        XCTAssertFalse(buildToolsCheck(paths: paths, version: "1").isReady)
+        XCTAssertEqual(buildToolsCheck(paths: paths, version: "1"), .blocked("about 90 MB download"))
+    }
+
+    func testInstallCompletionArrivesOnMainThread() throws {
+        let paths = BuilderPaths(support: tmp.appendingPathComponent("support"))
+        let bad = tmp.appendingPathComponent("bad.tgz")
+        try write("x", to: bad)
+        var onMain: Bool?
+        let done = expectation(description: "install")
+        PythonRuntime.install(paths, download: { _, finish in
+            DispatchQueue.global().async { finish(.success(bad)) }
+        }, completion: { _ in
+            onMain = Thread.isMainThread
+            done.fulfill()
+        })
+        wait(for: [done], timeout: 30)
+        XCTAssertEqual(onMain, true)
     }
 
     func testRemoveQuarantineRecursive() throws {

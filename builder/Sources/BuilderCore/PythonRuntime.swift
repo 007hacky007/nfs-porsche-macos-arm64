@@ -16,20 +16,35 @@ public enum PythonRuntime {
     public static let url = URL(string: "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-aarch64-apple-darwin-install_only.tar.gz")!
     public static let sha256 = "fbf4afef53c2a6b72bb741bc06d5671a9dfaf87bd84e5aa73ac9b3d0d589f14e"
 
+    static let markerName = ".nfsv-python-sha256"
+
+    /// True when the pinned build is installed: the executable exists and the marker matches the pin.
     public static func isInstalled(_ paths: BuilderPaths) -> Bool {
-        FileManager.default.isExecutableFile(atPath: paths.pythonExecutable.path)
+        guard FileManager.default.isExecutableFile(atPath: paths.pythonExecutable.path),
+              let marker = try? String(contentsOf: paths.python.appendingPathComponent(markerName), encoding: .utf8)
+        else { return false }
+        return marker.trimmingCharacters(in: .whitespacesAndNewlines) == sha256
     }
 
+    /// The archive handed to `done` by `download` must stay valid until `done` returns; the
+    /// installer verifies and unpacks it synchronously inside `done` and then deletes it (it
+    /// takes ownership). `completion` is always delivered on the main queue.
     public static func install(_ paths: BuilderPaths,
                                sha256 expected: String = PythonRuntime.sha256,
                                download: (URL, @escaping (Result<URL, Error>) -> Void) -> Void,
                                completion: @escaping (Result<Void, Error>) -> Void) {
         download(url) { result in
+            let outcome: Result<Void, Error>
             switch result {
             case .failure(let error):
-                completion(.failure(error))
+                outcome = .failure(error)
             case .success(let file):
-                completion(Result { try finishInstall(paths, archive: file, expected: expected) })
+                outcome = Result { try finishInstall(paths, archive: file, expected: expected) }
+            }
+            if Thread.isMainThread {
+                completion(outcome)
+            } else {
+                DispatchQueue.main.async { completion(outcome) }
             }
         }
     }
@@ -56,6 +71,7 @@ public enum PythonRuntime {
             throw PythonInstallError(message: "The Python download did not contain python/bin/python3")
         }
         try removeQuarantine(at: extracted)
+        try expected.write(to: extracted.appendingPathComponent(markerName), atomically: true, encoding: .utf8)
         if fm.fileExists(atPath: paths.python.path) {
             try fm.removeItem(at: paths.python)
         }

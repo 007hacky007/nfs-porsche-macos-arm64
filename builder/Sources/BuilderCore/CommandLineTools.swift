@@ -38,7 +38,7 @@ public struct CommandLineTools {
     }
 
     public func state() -> CheckState {
-        let missing = CheckState.blocked("Command line tools are not installed")
+        let missing = CheckState.blocked("Needed to compile the game on your Mac, about 2 GB from Apple")
         let result = runner.run("/usr/bin/xcode-select", ["-p"])
         let dir = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard result.status == 0, !dir.isEmpty else { return missing }

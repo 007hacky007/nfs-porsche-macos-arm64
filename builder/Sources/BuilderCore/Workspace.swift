@@ -44,6 +44,7 @@ public func prepareWorkspace(sources: URL, destination: URL, version: String) th
             try fm.copyItem(at: from, to: temp.appendingPathComponent(entry))
         }
         try removePycache(in: temp)
+        try removeQuarantine(at: temp)
         try version.write(to: temp.appendingPathComponent(versionMarker), atomically: true, encoding: .utf8)
         if fm.fileExists(atPath: destination.path) {
             try fm.removeItem(at: destination)
@@ -66,13 +67,15 @@ private func removePycache(in root: URL) throws {
     for url in found { try fm.removeItem(at: url) }
 }
 
-/// Ready when the workspace venv exists and was built from the current requirements.txt.
+/// Ready when the private Python is installed and the workspace venv was built from the
+/// current requirements.txt. Otherwise red: roughly 90 MB (Python archive plus packages) to fetch.
 public func buildToolsCheck(paths: BuilderPaths, version: String) -> CheckState {
     let workspace = paths.workspace(version: version)
-    guard FileManager.default.fileExists(atPath: paths.venvPython(version: version).path),
+    guard PythonRuntime.isInstalled(paths),
+          FileManager.default.fileExists(atPath: paths.venvPython(version: version).path),
           let requirements = try? sha256Hex(of: workspace.appendingPathComponent("requirements.txt")),
           let recorded = try? String(contentsOf: workspace.appendingPathComponent(".venv/.build-requirements-sha256"), encoding: .utf8),
           recorded.trimmingCharacters(in: .whitespacesAndNewlines) == requirements
-    else { return .automatic("Will be set up on the first build") }
+    else { return .blocked("about 90 MB download") }
     return .ready("Installed")
 }

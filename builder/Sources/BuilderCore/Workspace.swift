@@ -103,14 +103,15 @@ public func removeOldWorkspaces(_ paths: BuilderPaths, keeping version: String) 
 }
 
 /// Ready when the private Python is installed and the workspace venv was built from the
-/// current requirements.txt. Otherwise red: roughly 90 MB (Python archive plus packages) to fetch.
+/// current requirements.txt. Otherwise red: roughly 90 MB (Python archive plus packages) to
+/// fetch, or only the packages when Python is already there (after Remove build files).
 public func buildToolsCheck(paths: BuilderPaths, version: String) -> CheckState {
     let workspace = paths.workspace(version: version)
-    guard PythonRuntime.isInstalled(paths),
-          FileManager.default.fileExists(atPath: paths.venvPython(version: version).path),
+    guard PythonRuntime.isInstalled(paths) else { return .blocked("about 90 MB download") }
+    guard FileManager.default.fileExists(atPath: paths.venvPython(version: version).path),
           let requirements = try? sha256Hex(of: workspace.appendingPathComponent("requirements.txt")),
           let recorded = try? String(contentsOf: workspace.appendingPathComponent(".venv/.build-requirements-sha256"), encoding: .utf8),
           recorded.trimmingCharacters(in: .whitespacesAndNewlines) == requirements
-    else { return .blocked("about 90 MB download") }
+    else { return .blocked("Packages need to be set up again (small download)") }
     return .ready("Installed")
 }

@@ -241,9 +241,13 @@ final class EnvironmentTests: XCTestCase {
         XCTAssertEqual(buildToolsCheck(paths: paths, version: "1"), .blocked("about 90 MB download"))
         try fakePython(paths, marker: PythonRuntime.sha256)
         XCTAssertTrue(buildToolsCheck(paths: paths, version: "1").isReady)
-        // Python present, hash mismatch.
+        // Python present, hash mismatch: only the packages are fetched again.
+        let packages = CheckState.blocked("Packages need to be set up again (small download)")
         try write("numpy\nscipy\n", to: req)
-        XCTAssertEqual(buildToolsCheck(paths: paths, version: "1"), .blocked("about 90 MB download"))
+        XCTAssertEqual(buildToolsCheck(paths: paths, version: "1"), packages)
+        // Python present, venv removed (Remove build files).
+        try fm.removeItem(at: ws.appendingPathComponent(".venv"))
+        XCTAssertEqual(buildToolsCheck(paths: paths, version: "1"), packages)
     }
 
     func testInstallCompletionArrivesOnMainThread() throws {

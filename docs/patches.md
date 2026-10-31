@@ -87,7 +87,7 @@ The Windows ASI and proxy DirectInput DLL are not loaded into the ARM64 app. Its
 
 Fixes labeled only for NFS2SE, NFS3 or NFS4 in SilentPatch are outside this game's scope. Native macOS gamepad support is not added by installing a Windows DirectInput patch.
 
-Reference: [SilentPatchNFS90s Build 1 source](https://github.com/CookiePLMonster/SilentPatchNFS90s/tree/0b8b7149f0cc0914c10c0ad6996636b9e6d726ce). The MIT notice is retained in `third_party/SilentPatchNFS90s-LICENSE`.
+Reference: [SilentPatchNFS90s Build 1 source](https://github.com/CookiePLMonster/SilentPatchNFS90s/tree/0b8b7149f0cc0914c10c0ad6996636b9e6d726ce). Its behavior is reimplemented natively; no SilentPatch code is included. The upstream ReadMe from the verified download is kept with the prepared files.
 
 ## Verification scope
 

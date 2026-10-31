@@ -2,11 +2,11 @@ import Foundation
 
 public let defaultDestination = URL(fileURLWithPath: "/Applications")
 
-struct InstallError: LocalizedError {
-    let message: String
+public struct InstallError: LocalizedError {
+    public let message: String
     /// Underlying error text, for the log.
-    var details: String? = nil
-    var errorDescription: String? { message }
+    public var details: String? = nil
+    public var errorDescription: String? { message }
 }
 
 public func destinationCheck(_ directory: URL) -> CheckState {

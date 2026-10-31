@@ -31,7 +31,10 @@ final class EndToEndTests: XCTestCase {
         let started = Date()
         func mark(_ what: String) { print("E2E \(String(format: "%7.1f", Date().timeIntervalSince(started))) s: \(what)") }
 
-        try prepareWorkspace(sources: repositoryRoot(), destination: paths.workspace(version: version), version: version)
+        // NFSV_E2E_SOURCES points at an assembled app's Contents/Resources/BuildSources instead of the repo.
+        let sources = try ProcessInfo.processInfo.environment["NFSV_E2E_SOURCES"].map { URL(fileURLWithPath: $0) }
+            ?? repositoryRoot()
+        try prepareWorkspace(sources: sources, destination: paths.workspace(version: version), version: version)
         mark("workspace prepared")
 
         let installed = expectation(description: "python")

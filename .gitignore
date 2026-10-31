@@ -52,3 +52,4 @@ __pycache__/
 *.CUE
 /builder/.build/
 /builder/.swiftpm/
+/dist/

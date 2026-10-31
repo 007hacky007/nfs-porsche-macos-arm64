@@ -2,6 +2,9 @@ import contextlib
 import io
 import json
 import os
+import signal
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +12,20 @@ from unittest.mock import patch
 
 from tools import builder_cli
 from tools.game_source import GameSource, file_sha256
+
+ROOT = Path(__file__).resolve().parents[1]
+SLOW_CHECK = '''
+import contextlib, sys, time
+sys.path.insert(0, sys.argv[1])
+from tools import builder_cli
+@contextlib.contextmanager
+def slow(source, parent):
+    print('inside', parent, flush=True)
+    time.sleep(30)
+    yield source
+builder_cli.source_directory = slow
+sys.exit(builder_cli.main(['check-game', sys.argv[2]]))
+'''
 
 
 def run(*argv):
@@ -36,6 +53,19 @@ class BuilderCliTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn('checksum', events[-1]['error'])
         self.assertEqual(before, snapshot(fixture.game))
+
+    def test_cancel_removes_temporary_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = Path(tmp) / 'game'
+            game.mkdir()
+            child = subprocess.Popen([sys.executable, '-c', SLOW_CHECK, str(ROOT), str(game)], text=True,
+                                     stdout=subprocess.PIPE, env={**os.environ, 'TMPDIR': tmp})
+            self.addCleanup(child.kill)
+            self.assertIn('nfsv-check-', child.stdout.readline())
+            child.send_signal(signal.SIGTERM)
+            self.assertEqual(child.wait(timeout=10), 143)
+            child.stdout.close()
+            self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()), ['game'])
 
     def test_check_game_reports_missing_path(self):
         self.assertEqual(run('check-game', '/nonexistent/game'), (1, [{'error': 'game copy does not exist'}]))

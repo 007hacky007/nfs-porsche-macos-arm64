@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Machine-readable helpers for the NFSV Builder app. Prints NFSV-EVENT JSON lines."""
 import argparse
+import signal
 import sys
 import tempfile
 from pathlib import Path
@@ -35,6 +36,7 @@ def run(args):
 
 
 def main(argv=None):
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))  # Cancel: unwind temporary folders
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('check-game', help='verify a game folder, .iso, .bin or .cue').add_argument('path', type=Path)

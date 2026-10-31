@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -139,6 +140,7 @@ def prepared_game(source, cache, project=ROOT):
 
 
 def main():
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))  # Cancel: unwind temporary folders
     parser = argparse.ArgumentParser(description=__doc__,
                                      epilog='Your game copy is required and is never modified. Output: out/NFSV.app')
     parser.add_argument('game_copy', type=Path, nargs='?', help='folder containing GameData/FEData/Porsche.exe, or .iso/.bin/.cue')

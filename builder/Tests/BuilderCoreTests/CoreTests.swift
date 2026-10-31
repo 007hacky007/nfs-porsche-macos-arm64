@@ -43,6 +43,15 @@ final class CoreTests: XCTestCase {
         let broken = #"NFSV-EVENT {"supported": {"summary": "x"}}"#
         XCTAssertEqual(parsePipelineLine(broken), .log(broken))
     }
+    func testGameCheckDetailsKeepMessageAndDetectedChecksums() {
+        let log = ["", "Detected game-data fingerprint: 2b0e (4 files)", "  ", "Detected Porsche.exe SHA-256: 6c86"]
+        XCTAssertEqual(gameCheckDetails(message: "This copy's game data does not match.", log: log), """
+            This copy's game data does not match.
+            Detected game-data fingerprint: 2b0e (4 files)
+            Detected Porsche.exe SHA-256: 6c86
+            """)
+        XCTAssertEqual(gameCheckDetails(message: "Bad.", log: []), "Bad.")
+    }
     func testProgressAndDisk() {
         XCTAssertEqual(progressFraction(atStart: "extract"), 0)
         XCTAssertEqual(progressFraction(atStart: "compile"), 0.60, accuracy: 0.001)

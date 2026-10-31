@@ -46,8 +46,9 @@ struct ChecklistView: View {
         case (.patches, .automatic?) where model.toolsReady:
             return [RowButton(label: "Download", action: model.downloadPatches)]
         case (.gameCopy, .blocked?) where model.gameRejected:
-            return [RowButton(label: "Which copy works?", action: { showSupported = true }),
-                    RowButton(label: "Choose...", action: chooseGame)]
+            let details = model.gameDetails.map { text in [RowButton(label: "Copy details", action: { copyToPasteboard(text) })] }
+            return (details ?? []) + [RowButton(label: "Which copy works?", action: { showSupported = true }),
+                                      RowButton(label: "Choose...", action: chooseGame)]
         case (.gameCopy, _):
             return [RowButton(label: "Choose...", action: chooseGame)]
         case (.destination, _):
@@ -106,6 +107,8 @@ struct CheckRow: View {
     let state: CheckState
     let buttons: [RowButton]
 
+    /// Up to two buttons sit beside the message; more go on their own line below it, so the
+    /// message keeps the width it needs.
     var body: some View {
         HStack(spacing: 12) {
             Circle()
@@ -117,13 +120,20 @@ struct CheckRow: View {
                     .font(.callout)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if buttons.count > 2 {
+                    HStack { buttonViews }.padding(.top, 6)
+                }
             }
             Spacer(minLength: 8)
-            ForEach(buttons, id: \.label) { button in
-                Button(button.label, action: button.action)
-            }
+            if buttons.count <= 2 { buttonViews }
         }
         .padding(.vertical, 9)
+    }
+
+    private var buttonViews: some View {
+        ForEach(buttons, id: \.label) { button in
+            Button(button.label, action: button.action)
+        }
     }
 }
 

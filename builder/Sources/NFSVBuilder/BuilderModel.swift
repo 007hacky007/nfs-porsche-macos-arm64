@@ -25,6 +25,8 @@ final class BuilderModel: ObservableObject {
     @Published private(set) var setupDetails: String?
     /// True while the game row is red because the chosen copy was checked and rejected.
     @Published private(set) var gameRejected = false
+    /// The rejection message plus what the check logged (detected checksums), for Copy details.
+    @Published private(set) var gameDetails: String?
     /// The accepted releases for the "Which copy works?" sheet, loaded once from the pipeline.
     @Published private(set) var supported: SupportedCopies?
     @Published private(set) var supportedFailed = false
@@ -146,6 +148,7 @@ final class BuilderModel: ObservableObject {
     private func refreshGame() {
         guard let game = gamePath else {
             gameRejected = false
+            gameDetails = nil
             states[.gameCopy] = .blocked("Choose a game folder, .iso, .bin or .cue")
             return
         }
@@ -154,6 +157,7 @@ final class BuilderModel: ObservableObject {
             gameRunner = nil
             checkedGame = nil
             gameRejected = false
+            gameDetails = nil
             states[.gameCopy] = .checking("Checked once build tools are installed")
             return
         }
@@ -161,22 +165,30 @@ final class BuilderModel: ObservableObject {
         gameRunner?.cancel()
         checkedGame = game
         gameRejected = false
+        gameDetails = nil
         states[.gameCopy] = .checking("Checking your game copy...")
         let runner = PipelineRunner.checkGame(paths: paths, version: version, game: game)
         gameRunner = runner
         var detected: String?
         var message: String?
+        var output: [String] = []
         run(runner, onEvent: { event in
-            if case let .game(version) = event { detected = version }
-            if case let .error(text) = event { message = text }
+            switch event {
+            case let .game(version): detected = version
+            case let .error(text): message = text
+            case let .log(line): output.append(line)
+            default: break
+            }
         }, onExit: { [self] status in
             guard gameRunner === runner else { return }
             gameRunner = nil
             if status == 0, let detected = detected {
                 states[.gameCopy] = .ready(detected)
             } else {
+                let text = Self.plain(message ?? "Could not check this game copy")
                 gameRejected = message != nil && FileManager.default.fileExists(atPath: game.path)
-                states[.gameCopy] = .blocked(Self.plain(message ?? "Could not check this game copy"))
+                gameDetails = gameRejected ? gameCheckDetails(message: text, log: output) : nil
+                states[.gameCopy] = .blocked(text)
             }
         })
     }

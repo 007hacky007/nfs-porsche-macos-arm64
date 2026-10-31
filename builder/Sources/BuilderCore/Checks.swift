@@ -45,3 +45,9 @@ public func diskSpaceCheck(available: Int64) -> CheckState {
     }
     return .blocked("Only \(gb(available)) free, \(gb(requiredFreeBytes)) needed")
 }
+
+/// The text behind Copy details on a rejected game copy: the plain message, then the non-empty
+/// lines the check printed, which name the detected data fingerprint or Porsche.exe SHA-256.
+public func gameCheckDetails(message: String, log: [String]) -> String {
+    ([message] + log.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }).joined(separator: "\n")
+}

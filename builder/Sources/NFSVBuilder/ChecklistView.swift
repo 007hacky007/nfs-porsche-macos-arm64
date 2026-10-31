@@ -10,7 +10,7 @@ struct ChecklistView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(CheckID.allCases, id: \.self) { id in
-                CheckRow(title: id.title, state: model.states[id] ?? .checking("Checking..."), button: button(for: id))
+                CheckRow(title: id.title, state: model.states[id] ?? .checking("Checking..."), buttons: buttons(for: id))
                 if id != CheckID.allCases.last { Divider() }
             }
             Button(action: model.build) {
@@ -32,21 +32,23 @@ struct ChecklistView: View {
         .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted, perform: drop)
     }
 
-    private func button(for id: CheckID) -> RowButton? {
+    private func buttons(for id: CheckID) -> [RowButton] {
         let state = model.states[id]
         switch (id, state) {
         case (.commandLineTools, .blocked?):
-            return RowButton(label: "Install...", action: model.installCommandLineTools)
+            return [RowButton(label: "Install...", action: model.installCommandLineTools)]
         case (.buildTools, .blocked?):
-            return RowButton(label: "Install", action: model.installBuildTools)
+            let install = RowButton(label: "Install", action: model.installBuildTools)
+            guard let details = model.setupDetails else { return [install] }
+            return [RowButton(label: "Copy details", action: { copyToPasteboard(details) }), install]
         case (.patches, .automatic?) where model.toolsReady:
-            return RowButton(label: "Download", action: model.downloadPatches)
+            return [RowButton(label: "Download", action: model.downloadPatches)]
         case (.gameCopy, _):
-            return RowButton(label: "Choose...", action: chooseGame)
+            return [RowButton(label: "Choose...", action: chooseGame)]
         case (.destination, _):
-            return RowButton(label: "Change...", action: chooseDestination)
+            return [RowButton(label: "Change...", action: chooseDestination)]
         default:
-            return nil
+            return []
         }
     }
 
@@ -89,10 +91,15 @@ struct RowButton {
     let action: () -> Void
 }
 
+func copyToPasteboard(_ text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+}
+
 struct CheckRow: View {
     let title: String
     let state: CheckState
-    let button: RowButton?
+    let buttons: [RowButton]
 
     var body: some View {
         HStack(spacing: 12) {
@@ -107,7 +114,7 @@ struct CheckRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            if let button = button {
+            ForEach(buttons, id: \.label) { button in
                 Button(button.label, action: button.action)
             }
         }

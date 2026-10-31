@@ -75,7 +75,12 @@ struct RootView: View {
                 ResultView(model: model, outcome: .success(app))
             case let .failed(step, message, log):
                 ResultView(model: model, outcome: .failure(step: step, message: message, log: log))
+            case .quitToInstall:
+                ResultView(model: model, outcome: .quitToInstall)
             }
+        }
+        .alert(isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
+            Alert(title: Text(model.notice ?? ""))
         }
         .padding(20)
         .frame(width: 560)

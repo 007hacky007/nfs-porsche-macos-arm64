@@ -8,6 +8,8 @@ final class BuilderModel: ObservableObject {
         case building(stepID: String, fraction: Double, log: [String])
         case finished(URL)
         case failed(step: String, message: String, log: [String])
+        /// The build finished but NFSV is running; installing waits until the user quits it.
+        case quitToInstall(built: URL)
     }
 
     @Published private(set) var states: [CheckID: CheckState]
@@ -17,6 +19,10 @@ final class BuilderModel: ObservableObject {
     /// True once Cancel was pressed or the app started installing, so Cancel can no longer act.
     @Published private(set) var cancelDisabled = false
     @Published private(set) var buildFilesRemoved = false
+    /// A plain message shown as an alert over the checklist.
+    @Published var notice: String?
+    /// Output of the last failed build tools install, for Copy details.
+    @Published private(set) var setupDetails: String?
 
     let paths = BuilderPaths()
     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0-dev"
@@ -199,7 +205,7 @@ final class BuilderModel: ObservableObject {
     private func prepare(_ completion: @escaping (Bool) -> Void) {
         if workspaceReady { return completion(true) }
         guard let sources = sources else {
-            states[.buildTools] = .blocked("The build files are missing from this app. Download NFSV Builder again.")
+            states[.buildTools] = .blocked("This copy of NFSV Builder is incomplete. Download it again.")
             return completion(false)
         }
         states[.buildTools] = .checking("Preparing build files...")
@@ -220,6 +226,7 @@ final class BuilderModel: ObservableObject {
     func installBuildTools() {
         guard !installingTools, !shuttingDown else { return }
         installingTools = true
+        setupDetails = nil
         states[.buildTools] = .checking("Installing...")
         refreshGame()
         prepare { [self] ready in
@@ -259,25 +266,40 @@ final class BuilderModel: ObservableObject {
             case let .failure(error):
                 let text = error is URLError ? "Could not download Python. Check your internet connection and try again."
                     : Self.plain(error.localizedDescription)
-                toolsFailed(text)
+                toolsFailed(text, details: String(describing: error))
             }
         })
     }
 
     private func runSetup() {
         states[.buildTools] = .checking("Setting up build tools...")
-        run(.setup(paths: paths, version: version), onEvent: { _ in }, onExit: { [self] status in
+        var output: [String] = []
+        var error: String?
+        run(.setup(paths: paths, version: version), onEvent: { event in
+            switch event {
+            case let .log(line): output.append(line)
+            case let .step(_, title): output.append(title)
+            case let .error(message):
+                error = message
+                output.append("Error: \(message)")
+            default: break
+            }
+        }, onExit: { [self] status in
             installingTools = false
+            let details = (output + ["Setup exited with status \(status)."]).joined(separator: "\n")
             guard status == 0 else {
-                return toolsFailed("Could not set up the build tools. Check your internet connection and try again.")
+                let message = error.map(Self.plain)
+                    ?? "Could not set up the build tools. Check your internet connection and try again."
+                return toolsFailed(message, details: details)
             }
             refreshBuildTools()
-            if !toolsReady { toolsFailed("The build tools are incomplete. Try again.") }
+            if !toolsReady { toolsFailed("The build tools are incomplete. Try again.", details: details) }
         })
     }
 
-    private func toolsFailed(_ message: String) {
+    private func toolsFailed(_ message: String, details: String? = nil) {
         installingTools = false
+        setupDetails = details
         states[.buildTools] = .blocked(message)
         refreshGame()
     }
@@ -286,6 +308,10 @@ final class BuilderModel: ObservableObject {
 
     func build() {
         guard phase == .checklist, buildEnabled, let game = gamePath, !shuttingDown else { return }
+        if isNFSVRunning() {
+            notice = "Quit NFSV first, then try again."
+            return
+        }
         gameRunner?.cancel()
         patchesRunner?.cancel()
         (buildLog, buildStep, buildError, builtApp) = ([], "", nil, nil)
@@ -333,19 +359,39 @@ final class BuilderModel: ObservableObject {
         runner.cancel()
     }
 
+    /// Retries only the install of an already built app, after the user quit NFSV.
+    func installAgain() {
+        guard case let .quitToInstall(built) = phase else { return }
+        install(built)
+    }
+
     private func install(_ built: URL) {
         cancelDisabled = true
+        if case .quitToInstall = phase {
+            guard !isNFSVRunning() else {
+                notice = "NFSV is still running. Quit it, then click Install again."
+                return
+            }
+            phase = .building(stepID: buildStep, fraction: 0, log: buildLog)
+        } else if isNFSVRunning() {
+            appendLog("NFSV is running, so the new build was not installed yet.")
+            phase = .quitToInstall(built: built)
+            return
+        }
         appendLog("Installing NFSV.app into \(destination.path)")
         flushLog()
-        let running = isNFSVRunning()
         let directory = destination
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = Result { try installApp(built, into: directory, isRunning: { running }) }
+            // Checked again here in case the game was started since; NSRunningApplication is thread safe.
+            let result = Result { try installApp(built, into: directory, isRunning: isNFSVRunning) }
             DispatchQueue.main.async { [self] in
                 switch result {
                 case let .success(app):
                     buildFilesRemoved = false
                     phase = .finished(app)
+                case let .failure(error as InstallError) where error.details == nil && isNFSVRunning():
+                    appendLog(error.message)
+                    phase = .quitToInstall(built: built)
                 case let .failure(error):
                     if let details = (error as? InstallError)?.details { appendLog(details) }
                     fail(step: "Install", message: error.localizedDescription)
@@ -439,13 +485,15 @@ final class BuilderModel: ObservableObject {
         return sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 && value == 1
     }
 
-    /// The bundled sources, or in `swift run` the repository the executable was built from.
+    /// The bundled sources. Only outside an app bundle (`swift run`) does it fall back to the
+    /// repository the executable was built from.
     private static func findSources() -> URL? {
         if let bundled = Bundle.main.resourceURL?.appendingPathComponent("BuildSources"),
            FileManager.default.fileExists(atPath: bundled.appendingPathComponent("build.sh").path) {
             return bundled
         }
-        guard var url = Bundle.main.executableURL?.resolvingSymlinksInPath() else { return nil }
+        guard Bundle.main.bundleURL.pathExtension != "app",
+              var url = Bundle.main.executableURL?.resolvingSymlinksInPath() else { return nil }
         while url.path != "/" {
             url = url.deletingLastPathComponent()
             if FileManager.default.fileExists(atPath: url.appendingPathComponent("build.sh").path) { return url }

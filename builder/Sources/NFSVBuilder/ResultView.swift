@@ -5,6 +5,7 @@ struct ResultView: View {
     enum Outcome {
         case success(URL)
         case failure(step: String, message: String, log: [String])
+        case quitToInstall
     }
 
     @ObservedObject var model: BuilderModel
@@ -14,7 +15,25 @@ struct ResultView: View {
         switch outcome {
         case let .success(app): success(app)
         case let .failure(step, message, log): failure(step: step, message: message, log: log)
+        case .quitToInstall: quitToInstall
         }
+    }
+
+    private var quitToInstall: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 48))
+                .foregroundColor(Color(NSColor.systemOrange))
+            Text("NFSV is running").font(.title).fontWeight(.semibold)
+            Text("Quit NFSV, then click Install again.")
+                .foregroundColor(.secondary)
+            Button("Install again", action: model.installAgain)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, minHeight: 430)
     }
 
     private func success(_ app: URL) -> some View {
@@ -56,10 +75,7 @@ struct ResultView: View {
             Text("Details").font(.headline).padding(.top, 4)
             LogView(lines: log)
             HStack {
-                Button("Copy log") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(log.joined(separator: "\n"), forType: .string)
-                }
+                Button("Copy log") { copyToPasteboard(log.joined(separator: "\n")) }
                 Spacer()
                 Button("Try again", action: model.tryAgain)
                     .keyboardShortcut(.defaultAction)

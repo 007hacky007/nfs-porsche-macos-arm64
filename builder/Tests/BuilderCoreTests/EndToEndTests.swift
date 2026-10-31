@@ -3,8 +3,10 @@ import BuilderCore
 
 /// Drives the same BuilderCore calls as the Builder window against a real game copy.
 /// Skipped unless NFSV_E2E_GAME points at a game folder, .iso, .bin or .cue. Downloads the
-/// private Python and the packages, so it needs the network; set NFSV_CACHE_DIR to reuse a
-/// verified patch cache.
+/// private Python and the packages, so it needs the network. Without NFSV_CACHE_DIR the
+/// patches are downloaded into a temporary cache. To skip that download, point NFSV_CACHE_DIR
+/// at a COPY of a patch cache (a folder holding patches/): the pipeline replaces any cached
+/// archive that does not match its pinned checksum, so never point it at files you want kept.
 final class EndToEndTests: XCTestCase {
     private let fm = FileManager.default
     private let version = "0.0.0-e2e"
@@ -18,6 +20,14 @@ final class EndToEndTests: XCTestCase {
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: tmp) }
         let paths = BuilderPaths(support: tmp.appendingPathComponent("support"))
+        // Never touch the real ~/Library/Caches/NFSV: the runners pass NFSV_CACHE_DIR on.
+        if ProcessInfo.processInfo.environment["NFSV_CACHE_DIR"] == nil {
+            let cache = tmp.appendingPathComponent("cache")
+            try fm.createDirectory(at: cache, withIntermediateDirectories: true)
+            setenv("NFSV_CACHE_DIR", cache.path, 1)
+        }
+        defer { if ProcessInfo.processInfo.environment["NFSV_CACHE_DIR"]?.hasPrefix(tmp.path) == true { unsetenv("NFSV_CACHE_DIR") } }
+        XCTAssertNotNil(PipelineRunner.pipelineEnvironment()["NFSV_CACHE_DIR"])
         let started = Date()
         func mark(_ what: String) { print("E2E \(String(format: "%7.1f", Date().timeIntervalSince(started))) s: \(what)") }
 

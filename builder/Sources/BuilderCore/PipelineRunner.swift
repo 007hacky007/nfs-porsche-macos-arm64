@@ -76,6 +76,10 @@ public final class PipelineRunner {
         venv(paths, version, ["tools/builder_cli.py", "patches", "fetch"])
     }
 
+    public static func supported(paths: BuilderPaths, version: String) -> PipelineRunner {
+        venv(paths, version, ["tools/builder_cli.py", "supported"])
+    }
+
     public static func build(paths: BuilderPaths, version: String, game: URL) -> PipelineRunner {
         venv(paths, version, ["tools/build_app.py", "--progress", game.path])
     }

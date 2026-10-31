@@ -25,6 +25,24 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(parsePipelineLine("NFSV-EVENT {broken"), .log("NFSV-EVENT {broken"))
         XCTAssertEqual(parsePipelineLine("plain"), .log("plain"))
     }
+    func testParseSupportedCopies() {
+        let line = #"NFSV-EVENT {"supported": {"summary": "Choose a folder.", "data": [{"version": "USA v3.2", "files": 1568, "bytes": 528771197, "sha256": "e5b1"}], "executables": [{"version": "USA v3.2 disc loader", "name": "Porsche.exe", "bytes": 249119, "sha256": "6c86"}]}}"#
+        XCTAssertEqual(parsePipelineLine(line), .supported(SupportedCopies(
+            summary: "Choose a folder.",
+            data: [.init(version: "USA v3.2", files: 1568, bytes: 528_771_197, sha256: "e5b1")],
+            executables: [.init(version: "USA v3.2 disc loader", name: "Porsche.exe", bytes: 249_119, sha256: "6c86")])))
+        guard case let .supported(copies) = parsePipelineLine(line) else { return XCTFail() }
+        XCTAssertEqual(copies.plainText, """
+            Choose a folder.
+            Game data (GameData, FEData, fe.txt and install.txt), one of:
+            - USA v3.2: 1568 files, 528771197 bytes, SHA-256 e5b1
+            Porsche.exe, one of:
+            - USA v3.2 disc loader: 249119 bytes, SHA-256 6c86
+            \(SupportedCopies.checksumNote)
+            """)
+        let broken = #"NFSV-EVENT {"supported": {"summary": "x"}}"#
+        XCTAssertEqual(parsePipelineLine(broken), .log(broken))
+    }
     func testProgressAndDisk() {
         XCTAssertEqual(progressFraction(atStart: "extract"), 0)
         XCTAssertEqual(progressFraction(atStart: "compile"), 0.60, accuracy: 0.001)

@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -10,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tools import builder_cli
+from tools import builder_cli, game_source
 from tools.game_source import GameSource, file_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,9 +29,9 @@ sys.exit(builder_cli.main(['check-game', sys.argv[2]]))
 '''
 
 
-def run(*argv):
+def run(*argv, err=None):
     out = io.StringIO()
-    with contextlib.redirect_stdout(out):
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err or io.StringIO()):
         code = builder_cli.main(list(argv))
     events = [json.loads(l[len('NFSV-EVENT '):]) for l in out.getvalue().splitlines() if l.startswith('NFSV-EVENT ')]
     return code, events
@@ -47,11 +48,15 @@ class BuilderCliTests(unittest.TestCase):
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
         before = snapshot(fixture.game)
+        err = io.StringIO()
         with patch('tools.downloads.fetch_patches') as download:
-            code, events = run('check-game', str(fixture.game))
+            code, events = run('check-game', str(fixture.game), err=err)
             download.assert_not_called()
         self.assertEqual(code, 1)
-        self.assertIn('checksum', events[-1]['error'])
+        self.assertIn('does not match a supported release', events[-1]['error'])
+        detected = game_source.assets_digest(game_source.game_files(fixture.game))
+        self.assertNotIn(detected, events[-1]['error'])
+        self.assertIn(detected, err.getvalue())
         self.assertEqual(before, snapshot(fixture.game))
 
     def test_cancel_removes_temporary_folder(self):
@@ -66,6 +71,24 @@ class BuilderCliTests(unittest.TestCase):
             self.assertEqual(child.wait(timeout=10), 143)
             child.stdout.close()
             self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()), ['game'])
+
+    def test_supported_lists_the_readme_release_tables(self):
+        code, events = run('supported')
+        self.assertEqual(code, 0)
+        supported = events[0]['supported']
+        readme = (ROOT / 'README.md').read_text()
+        data = [{'version': v, 'files': int(f), 'bytes': int(b), 'sha256': s} for v, f, b, s in
+                re.findall(r'^\| (USA v3\.\d) \| (\d+) \| (\d+) \| `([0-9a-f]{64})` \|$', readme, re.M)]
+        exes = [{'version': v, 'name': n, 'bytes': int(b), 'sha256': s} for v, n, b, s in
+                re.findall(r'^\| ((?:Supported )?USA v3\.\d[^|]*?) \| `(Porsche\.exe)` \| (\d+) \| `([0-9a-f]{64})` \|$',
+                           readme, re.M)]
+        self.assertEqual(len(data), 2)
+        self.assertEqual(len(exes), 3)
+        self.assertEqual(supported['data'], data)
+        self.assertEqual(supported['executables'], exes)
+        for word in ('folder', 'ISO', 'BIN/CUE', 'GameData', 'FEData', 'fe.txt', 'install.txt', 'Porsche.exe'):
+            self.assertIn(word, supported['summary'])
+        self.assertNotIn('\n', supported['summary'])
 
     def test_check_game_reports_missing_path(self):
         self.assertEqual(run('check-game', '/nonexistent/game'), (1, [{'error': 'game copy does not exist'}]))

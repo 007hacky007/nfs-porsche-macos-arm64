@@ -179,6 +179,8 @@ def cli():
     try:
         main()
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        if getattr(error, 'detail', None):
+            print(error.detail, file=sys.stderr, flush=True)
         print(f'Build failed: {error}', file=sys.stderr, flush=True)
         if PROGRESS:
             emit({'error': STEP_FAILED if isinstance(error, subprocess.CalledProcessError) else str(error)})

@@ -27,7 +27,7 @@ The Builder shows a checklist:
 - **Xcode command line tools**: **Install...** opens Apple's installer (about 2 GB).
 - **Build tools**: the Builder downloads its own private Python (about 90 MB) into `~/Library/Application Support/NFSV Builder`. It never touches other Python installs.
 - **Patches**: downloaded during the build if they are not already cached.
-- **Game copy**: click **Choose...** or drag a folder, `.iso`, `.bin` or `.cue` onto the window.
+- **Game copy**: click **Choose...** or drag a folder, `.iso`, `.bin` or `.cue` onto the window. If your copy is rejected, click **Which copy works?** to see the supported releases with their file counts, sizes and checksums.
 - **Destination**: where NFSV.app is placed. The default is Applications.
 - **Free disk space**: enough room for the build.
 

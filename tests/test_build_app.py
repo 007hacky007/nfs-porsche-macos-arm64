@@ -53,7 +53,7 @@ class BuildAppTests(unittest.TestCase):
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
         with patch('tools.downloads.fetch_patches') as download:
-            with self.assertRaisesRegex(ValueError, 'checksum'):
+            with self.assertRaisesRegex(ValueError, 'does not match a supported release'):
                 build_app.prepared_game(fixture.game, fixture.root / 'cache', fixture.root / 'project')
             download.assert_not_called()
 

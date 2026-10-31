@@ -23,6 +23,11 @@ final class BuilderModel: ObservableObject {
     @Published var notice: String?
     /// Output of the last failed build tools install, for Copy details.
     @Published private(set) var setupDetails: String?
+    /// True while the game row is red because the chosen copy was checked and rejected.
+    @Published private(set) var gameRejected = false
+    /// The accepted releases for the "Which copy works?" sheet, loaded once from the pipeline.
+    @Published private(set) var supported: SupportedCopies?
+    @Published private(set) var supportedFailed = false
 
     let paths = BuilderPaths()
     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0-dev"
@@ -41,6 +46,7 @@ final class BuilderModel: ObservableObject {
     private var gameRunner: PipelineRunner?
     private var checkedGame: URL?
     private var patchesRunner: PipelineRunner?
+    private var supportedRunner: PipelineRunner?
 
     private var buildRunner: PipelineRunner?
     private var buildLog: [String] = []
@@ -139,6 +145,7 @@ final class BuilderModel: ObservableObject {
 
     private func refreshGame() {
         guard let game = gamePath else {
+            gameRejected = false
             states[.gameCopy] = .blocked("Choose a game folder, .iso, .bin or .cue")
             return
         }
@@ -146,12 +153,14 @@ final class BuilderModel: ObservableObject {
             gameRunner?.cancel()
             gameRunner = nil
             checkedGame = nil
+            gameRejected = false
             states[.gameCopy] = .checking("Checked once build tools are installed")
             return
         }
         guard checkedGame != game else { return }
         gameRunner?.cancel()
         checkedGame = game
+        gameRejected = false
         states[.gameCopy] = .checking("Checking your game copy...")
         let runner = PipelineRunner.checkGame(paths: paths, version: version, game: game)
         gameRunner = runner
@@ -166,8 +175,25 @@ final class BuilderModel: ObservableObject {
             if status == 0, let detected = detected {
                 states[.gameCopy] = .ready(detected)
             } else {
+                gameRejected = message != nil && FileManager.default.fileExists(atPath: game.path)
                 states[.gameCopy] = .blocked(Self.plain(message ?? "Could not check this game copy"))
             }
+        })
+    }
+
+    /// Loads the accepted releases from `builder_cli supported`, which needs the build tools.
+    func loadSupported() {
+        guard supported == nil, supportedRunner == nil, toolsReady else { return }
+        supportedFailed = false
+        let runner = PipelineRunner.supported(paths: paths, version: version)
+        supportedRunner = runner
+        var copies: SupportedCopies?
+        run(runner, onEvent: { event in
+            if case let .supported(value) = event { copies = value }
+        }, onExit: { [self] _ in
+            supportedRunner = nil
+            supported = copies
+            supportedFailed = copies == nil
         })
     }
 

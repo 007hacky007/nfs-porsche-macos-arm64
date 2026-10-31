@@ -29,6 +29,9 @@ def run(args):
         with tempfile.TemporaryDirectory(prefix='nfsv-check-') as temporary, \
                 source_directory(source, temporary) as folder:
             emit({'game': 'ok', 'version': game_source.verify_game(folder).version})
+    elif args.command == 'supported':
+        emit({'supported': {'summary': game_source.SUMMARY, 'data': list(game_source.DATA_VERSIONS),
+                            'executables': list(game_source.EXECUTABLES)}})
     elif args.action == 'status':
         emit({'patches': 'ready' if patches_ready() else 'missing'})
     else:
@@ -43,10 +46,13 @@ def main(argv=None):
     commands.add_parser('check-game', help='verify a game folder, .iso, .bin or .cue').add_argument('path', type=Path)
     commands.add_parser('patches', help='inspect or download the pinned patches').add_argument(
         'action', choices=('status', 'fetch'))
+    commands.add_parser('supported', help='list the accepted game releases and their checksums')
     args = parser.parse_args(argv)
     try:
         run(args)
     except (ValueError, OSError) as error:
+        if getattr(error, 'detail', None):
+            print(error.detail, file=sys.stderr, flush=True)
         emit({'error': str(error)})
         return 1
     return 0

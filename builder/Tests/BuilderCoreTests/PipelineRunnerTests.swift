@@ -276,6 +276,7 @@ final class PipelineRunnerTests: XCTestCase {
             (.checkGame(paths: paths, version: "1.2.0", game: game), venv, ["tools/builder_cli.py", "check-game", game.path]),
             (.patchesStatus(paths: paths, version: "1.2.0"), venv, ["tools/builder_cli.py", "patches", "status"]),
             (.fetchPatches(paths: paths, version: "1.2.0"), venv, ["tools/builder_cli.py", "patches", "fetch"]),
+            (.supported(paths: paths, version: "1.2.0"), venv, ["tools/builder_cli.py", "supported"]),
             (.build(paths: paths, version: "1.2.0", game: game), venv, ["tools/build_app.py", "--progress", game.path]),
         ]
         for (runner, executable, arguments) in expected {

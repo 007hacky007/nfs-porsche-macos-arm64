@@ -4,15 +4,34 @@ import shutil
 from pathlib import Path
 from typing import NamedTuple
 
-SUPPORTED_DATA = {
-    'e5b118ac8e7910049f7fc9bde3274b44f7eb5911e30efece7e3b33d68ea20747': 'USA v3.2',
-    '57f3f4d1405e7b41b2581c47558ef4aa8b31e3d8c29fb1038334a0d34a30a1b8': 'USA v3.4',
-}
-SUPPORTED_EXES = {
-    '6c862baecb74ad15be61fe54dd4ee0e4401719d369c74432dbfe9381c1812f11': 'USA v3.2 disc executable',
-    '4b7bc7fc134f3e6145b9ad5dea1938085e9562344a088279d216f08a1543e9d8': 'USA v3.4 disc executable',
-    '02437ddbf41af86dffe14251b28ed8889bd1c4c904fe77ff730d8912257ec90d': 'USA v3.5 executable',
-}
+# The accepted releases, as listed in the README tables "Checksums and byte sizes". Sizes are exact
+# byte counts of the extracted files; the data fingerprint is assets_digest() of GameData, FEData,
+# fe.txt and install.txt.
+DATA_VERSIONS = (
+    {'version': 'USA v3.2', 'files': 1568, 'bytes': 528771197,
+     'sha256': 'e5b118ac8e7910049f7fc9bde3274b44f7eb5911e30efece7e3b33d68ea20747'},
+    {'version': 'USA v3.4', 'files': 1567, 'bytes': 528742714,
+     'sha256': '57f3f4d1405e7b41b2581c47558ef4aa8b31e3d8c29fb1038334a0d34a30a1b8'},
+)
+EXECUTABLES = (
+    {'version': 'USA v3.2 disc loader', 'name': 'Porsche.exe', 'bytes': 249119,
+     'sha256': '6c862baecb74ad15be61fe54dd4ee0e4401719d369c74432dbfe9381c1812f11'},
+    {'version': 'USA v3.4 disc loader', 'name': 'Porsche.exe', 'bytes': 341279,
+     'sha256': '4b7bc7fc134f3e6145b9ad5dea1938085e9562344a088279d216f08a1543e9d8'},
+    {'version': 'Supported USA v3.5 executable', 'name': 'Porsche.exe', 'bytes': 2129965,
+     'sha256': '02437ddbf41af86dffe14251b28ed8889bd1c4c904fe77ff730d8912257ec90d'},
+)
+SUMMARY = ('Choose a folder, ISO or BIN/CUE image of the unmodified English USA PC release, version 3.2 or 3.4. '
+           'A folder must contain GameData, FEData, fe.txt, install.txt and Porsche.exe.')
+SUPPORTED_DATA = {d['sha256']: d['version'] for d in DATA_VERSIONS}
+SUPPORTED_EXES = {e['sha256']: e['version'] for e in EXECUTABLES}
+
+
+class UnsupportedGame(ValueError):
+    """A rejected game copy; `detail` names the detected checksum for the log."""
+    def __init__(self, message, detail):
+        super().__init__(message)
+        self.detail = detail
 
 
 class GameSource(NamedTuple):
@@ -82,10 +101,13 @@ def verify_game(root):
     files = game_files(root)
     assets = assets_digest(files)
     if assets not in SUPPORTED_DATA:
-        raise ValueError(f'game data checksum is unsupported ({assets}). Use unmodified English USA v3.2 or v3.4 PC files; mods and incomplete copies are not accepted.')
+        raise UnsupportedGame("This copy's game data does not match a supported release. "
+                              'NFSV needs the unmodified English USA PC release, version 3.2 or 3.4.',
+                              f'Detected game-data fingerprint: {assets} ({len(files) - 1} files)')
     exe = file_sha256(files[Path('Porsche.exe')])
     if exe not in SUPPORTED_EXES:
-        raise ValueError(f'unsupported source executable checksum: {exe}')
+        raise UnsupportedGame('Porsche.exe is not a supported USA v3.2, v3.4 or v3.5 executable.',
+                              f'Detected Porsche.exe SHA-256: {exe}')
     return GameSource(files, SUPPORTED_DATA[assets], assets, exe)
 
 

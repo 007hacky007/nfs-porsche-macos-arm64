@@ -1,27 +1,57 @@
 # NFSV for Apple Silicon
 
-Build your own macOS version of **Need for Speed: Porsche Unleashed** with native ARM64 code, Metal graphics and CoreAudio sound.
+Play **Need for Speed: Porsche Unleashed** natively on your Apple Silicon Mac, built from your own game copy. NFSV turns your PC copy of the game into a Mac app with native ARM64 code, Metal graphics and CoreAudio sound.
 
-**This repository contains no EA game code, game executable, translated game functions or game assets. You must supply your own PC game copy.** The build script checks your files, downloads the required patches and translates the game locally. Downloaded patches, extracted files, generated code and finished apps are not tracked in git.
+<p align="center">
+  <img src="docs/images/launcher.png" width="420" alt="NFSV launcher with resolution, frame-rate, fullscreen and cursor settings">
+</p>
 
-## Easiest way: NFSV Builder
+## What you get
 
-NFSV Builder is a small app that installs what is missing and builds NFSV.app from your own game copy. It needs an Apple Silicon Mac with **macOS 12 or newer**. On macOS 11, use [Build from Terminal](#build-from-terminal) instead.
+- The original game: menus, garage, Quick Race, Evolution and Factory Driver.
+- The original sound effects, music, movies and movie audio.
+- Native Metal graphics in HD, 1440p and 4K race resolutions, in 16 and 32 bit color.
+- Optional 4x antialiasing and 16x anisotropic filtering, on by default.
+- A race HUD that scales with the resolution, including text, gauges, the map and the rear-view mirror.
+- A launcher before each game: race resolution, fullscreen or windowed, frame-rate limit, HUD size, Mac cursor and enhanced graphics. Your choices are remembered.
+- Fullscreen by default. Control-Command-F, F11 or the green window button switches between fullscreen and a window while you play.
+- The original in-game pointer. The Mac cursor is hidden inside the game view by default and comes back outside the window.
+- Keyboard and mouse controls, and Command-V or Control-V to paste text.
+- Switching to another app releases held controls and keeps the picture and sound running without restarting the song.
+- Your own saves, kept apart from the game files, which stay unchanged.
+
+## What you need
+
+- A Mac with Apple Silicon (M1 or later) and **macOS 12 or newer**. On macOS 11, use [Build from Terminal](#build-from-terminal) instead.
+- Your own copy of the **English USA PC version** of the game, as a folder, a disc image (`.iso`) or a `.bin`/`.cue` pair. See [Which game copy works](#which-game-copy-works).
+- An internet connection for the first build.
+
+NFSV Builder installs everything else for you.
+
+## Build your game
+
+NFSV Builder is a small app that installs what is missing and builds NFSV.app from your own game copy.
+
+<p align="center">
+  <img src="docs/images/builder.png" width="460" alt="NFSV Builder checklist with every row green, the game copy recognised as USA v3.2 and the Build NFSV.app button enabled">
+</p>
 
 1. Download `NFSV-Builder.dmg` from the [Releases page](../../releases/latest) of this repository and open it. You do not need to copy NFSV Builder anywhere.
+2. Run **NFSV Builder** from the opened disk.
+
+NFSV Builder is free and open source but not signed by Apple, so macOS asks once before it opens. The same steps are drawn on the disk's background.
 
 **On macOS 14 or older:** right-click **NFSV Builder** and choose **Open**.
 
-**macOS 15 or newer:**
+**On macOS 15 or newer:**
 
-2. Run **NFSV Builder** from the opened disk.
-3. macOS says it cannot be opened. Click **Done**.
-4. Open **System Settings**, then **Privacy & Security**, and scroll down.
-5. Click **Open Anyway**.
+1. macOS says it cannot be opened. Click **Done**.
+2. Open **System Settings**, then **Privacy & Security**, and scroll down.
+3. Click **Open Anyway**.
 
-NFSV Builder is free and open source but not signed by Apple, so macOS asks once. The same steps are drawn on the disk's background.
+### The checklist
 
-The Builder shows a checklist:
+The Builder shows a checklist. Green rows are ready, orange rows are handled automatically, and red rows need you.
 
 - **Mac**: Apple Silicon and a supported macOS version.
 - **Xcode command line tools**: **Install...** opens Apple's installer (about 2 GB).
@@ -31,9 +61,44 @@ The Builder shows a checklist:
 - **Destination**: where NFSV.app is placed. The default is Applications.
 - **Free disk space**: enough room for the build.
 
-Fix the red rows, then click **Build NFSV.app**. When it finishes you can click **Play**, **Show in Finder** or **Remove build files**. The Builder shares the patch cache `~/Library/Caches/NFSV/patches` with `./build.sh`.
+Fix the red rows, then click **Build NFSV.app**. When it finishes you can click **Play**, **Show in Finder** or **Remove build files**.
 
-## What you need
+### Playing
+
+Open NFSV.app. The launcher appears first:
+
+- **Race resolution**: **Use in-game setting** lets the game's own graphics menu choose it. Menus and movies keep their original resolution.
+- **Start in fullscreen**, or play in a window. Fullscreen is the initial default.
+- **Frame-rate limit**: game default, 30, 60 or 120 FPS. This is a cap; the game and display can run slower.
+- **HUD size**: try 75% for a smaller HUD in 4K; 100% keeps the full automatic size.
+- **Hide macOS cursor while playing**: on by default.
+- **Enhanced graphics**: smoother edges and sharper textures, on by default. Turn it off for the original look or a higher frame rate on older Macs.
+
+Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
+
+Saves and the game log live in `~/Library/Application Support/NFSV`. Rebuilding or replacing the app does not touch them, so existing careers keep their progress. Quit the game before rebuilding.
+
+## Which game copy works
+
+You need the **English USA PC release of Need for Speed: Porsche Unleashed, version 3.2 or 3.4, unmodified**. It can be:
+
+- a folder with the game files (`GameData`, `FEData`, `fe.txt`, `install.txt` and `Porsche.exe`),
+- an ISO disc image, or
+- a BIN/CUE disc image pair.
+
+Localized (non-English) releases, console versions, incomplete folders and modified game files are rejected. You do not need to install any patches or find another `Porsche.exe` yourself: the build downloads and applies what it needs.
+
+If your copy is rejected, the Builder's **Which copy works?** button lists the accepted releases. The exact file counts, sizes and checksums are in [Checksums and byte sizes](#checksums-and-byte-sizes) below.
+
+---
+
+# Technical details
+
+The rest of this page is for power users, LLM agents and anyone curious about how the build works.
+
+**This repository contains no EA game code, game executable, translated game functions or game assets. You must supply your own PC game copy.** The build script checks your files, downloads the required patches and translates the game locally. Downloaded patches, extracted files, generated code and finished apps are not tracked in git.
+
+## Requirements in detail
 
 - An Apple Silicon Mac. NFSV Builder needs macOS 12 or newer; the Terminal build and the game it produces support macOS 11 or newer.
 - Xcode command line tools. NFSV Builder offers to install them; for the Terminal build, install them once with `xcode-select --install`. These are the only part that comes from Apple.
@@ -70,35 +135,38 @@ The script sets up `.venv`, extracts images, verifies all game-data and executab
 
 When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications; it contains a private copy of the prepared files and needs no separate game-folder selection. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
 
-The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, macOS cursor visibility and enhanced graphics. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch. **HUD size** ranges from 25% to 100% of the automatic resolution scaling, with the original HUD size as a minimum. Try 75% for a smaller HUD in 4K; 100% keeps the full automatic size. **Use in-game setting** lets the game's graphics menu control race resolution; choosing a specific launcher resolution overrides that setting for the session and selects 32-bit color when available. Menus and movies keep their original resolution. The frame-rate limit is a cap; the game and display can run slower. **Enhanced graphics** is on by default. It adds 4x multisample antialiasing and 16x anisotropic texture filtering, the driver settings that the Combined Patch readme asks Windows players to force in their graphics driver. Turn it off for the original look or a higher frame rate on older Macs.
-
-![NFSV launcher with resolution, frame-rate, fullscreen and cursor settings](docs/images/launcher.png)
-
-The build extracts the original Windows game icon from your supplied `Porsche.exe` before patching and converts it to a macOS icon during packaging. No standalone game icon is included for packaging.
-
 If a checksum fails, use a complete, unmodified supported copy. Renaming an unsupported executable or changing a version string will not make it compatible. `./build.sh --help` shows the accepted inputs.
 
-## Features
+## Launcher settings
 
-- Original game code for menus, garage, Quick Race, Evolution and Factory Driver.
-- Native Metal rendering, including textures, depth, fog and the patched primitive-drawing path.
-- HD, 1440p and 4K race resolutions in 16 and 32 bit color.
-- Optional 4x antialiasing and 16x anisotropic filtering, on by default.
-- Race HUD scales with resolution, including text, gauges, the map and rear-view mirror.
-- Pre-game display settings, remembered between launches. Fullscreen is the initial default; Control-Command-F, F11 or the green window button toggles it while playing.
-- Original in-game pointer, with the Mac cursor hidden inside the game view by default and restored outside the window.
-- Keyboard/mouse input and Command-V or Control-V text paste.
-- Original sound effects, music, movies and movie audio through CoreAudio and Metal.
-- Switching apps releases held controls and keeps display/audio active without restarting the song.
-- Separate writable saves; the bundled game files remain unchanged.
+The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, macOS cursor visibility and enhanced graphics. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
 
-Menus and movies retain their source artwork and aspect ratio. Higher race resolutions do not add detail to that artwork. Menus, driving, sound and intro playback have been exercised; complete career progression, every patched car/track and long sessions still need play testing. Native gamepad support and internet multiplayer are not established by this port.
+- **HUD size** ranges from 25% to 100% of the automatic resolution scaling, with the original HUD size as a minimum. Try 75% for a smaller HUD in 4K; 100% keeps the full automatic size.
+- **Use in-game setting** lets the game's graphics menu control race resolution; choosing a specific launcher resolution overrides that setting for the session and selects 32-bit color when available. Menus and movies keep their original resolution.
+- The frame-rate limit is a cap; the game and display can run slower.
+- **Enhanced graphics** is on by default. It adds 4x multisample antialiasing and 16x anisotropic texture filtering, the driver settings that the Combined Patch readme asks Windows players to force in their graphics driver. Turn it off for the original look or a higher frame rate on older Macs.
+
+The build extracts the original Windows game icon from your supplied `Porsche.exe` before patching and converts it to a macOS icon during packaging. No standalone game icon is included for packaging.
 
 ## Saves and build files
 
 Saves and the game log live in `~/Library/Application Support/NFSV`. Rebuilding or replacing the app does not replace that directory. Existing careers keep their progress; fixes encoded in the patch's sample profile require a new profile.
 
 The script keeps Python dependencies in `.venv`, extracted/prepared game files in `local/builds`, and generated C, objects and app output in `gen` and `out`. These paths are ignored by git. Patch archives stay outside the repository, in `~/Library/Caches/NFSV/patches`. Every cached download is checked before use. Upstream patch notices are retained with the prepared files and in the app.
+
+NFSV Builder shares the patch cache `~/Library/Caches/NFSV/patches` with `./build.sh`. Its private Python and build files live in `~/Library/Application Support/NFSV Builder`. **Remove build files**, offered after a successful build, frees the space used while building; Python and the downloaded patches are kept.
+
+## How native is it?
+
+The build reads the verified 32-bit x86 executable from your locally prepared copy, discovers its functions and statically translates their instructions to C. Apple Clang then compiles that generated C to ARM64 machine code. The generated source contains code derived from your game copy; it exists only in ignored build directories and is never part of the repository.
+
+The original game's logic, menus, physics, AI, modes and movie decoder run as compiled ARM64 functions. This is not an engine recreation. Windows imports are handled by native compatibility code for files, memory, threads and input. The original Thrash graphics interface is implemented with Metal, including textures, depth, fog and the patched primitive-drawing path; Cocoa provides windows and CoreAudio provides audio. The finished app does not use Wine, Rosetta or a runtime x86 interpreter.
+
+When a launcher resolution is selected, a native callback updates the original front-end resolution accessor before its original getter runs. The game then selects its video mode through its normal path. This changes runtime settings; the supplied executable and bundled game assets remain unchanged. The optional native frame cap releases the guest lock while waiting so audio and other guest threads can continue.
+
+It still preserves the original 32-bit address space, x86 register/flag state, x87/SSE semantics and indirect-call dispatch in its generated code. That adds overhead compared with a port written from the original C/C++ source. ARM64 uses 64-bit floating-point intermediates where x86 could use 80-bit x87 values, so exact numerical equivalence is not guaranteed in every path.
+
+Before translation, Unicorn runs only the verified patch's initialization at build time to resolve its instruction changes. Unicorn and Python are not bundled in the app. The resulting patched `Porsche.exe` is verified against the prepared-executable SHA-256 documented below.
 
 ## Patches used
 
@@ -148,16 +216,12 @@ The builder creates a different `Porsche.exe` in its private prepared folder by 
 | --- | --- | ---: | --- |
 | Combined Patch v1.1, linked for native translation | `Porsche.exe` | 2924032 | `13273410b8951e3785a5def780667d6101b1f72e8ac8fd9561f13b3cf724267b` |
 
-## How native is it?
+## Limitations
 
-The build reads the verified 32-bit x86 executable from your locally prepared copy, discovers its functions and statically translates their instructions to C. Apple Clang then compiles that generated C to ARM64 machine code. The generated source contains code derived from your game copy; it exists only in ignored build directories and is never part of the repository.
+Menus and movies retain their source artwork and aspect ratio. Higher race resolutions do not add detail to that artwork. Menus, driving, sound and intro playback have been exercised; complete career progression, every patched car/track and long sessions still need play testing. Native gamepad support and internet multiplayer are not established by this port.
 
-The original game's logic, menus, physics, AI, modes and movie decoder run as compiled ARM64 functions. This is not an engine recreation. Windows imports are handled by native compatibility code for files, memory, threads and input. The original Thrash graphics interface is implemented with Metal; Cocoa provides windows and CoreAudio provides audio. The finished app does not use Wine, Rosetta or a runtime x86 interpreter.
+## Legal and notices
 
-When a launcher resolution is selected, a native callback updates the original front-end resolution accessor before its original getter runs. The game then selects its video mode through its normal path. This changes runtime settings; the supplied executable and bundled game assets remain unchanged. The optional native frame cap releases the guest lock while waiting so audio and other guest threads can continue.
-
-It still preserves the original 32-bit address space, x86 register/flag state, x87/SSE semantics and indirect-call dispatch in its generated code. That adds overhead compared with a port written from the original C/C++ source. ARM64 uses 64-bit floating-point intermediates where x86 could use 80-bit x87 values, so exact numerical equivalence is not guaranteed in every path.
-
-Before translation, Unicorn runs only the verified patch's initialization at build time to resolve its instruction changes. Unicorn and Python are not bundled in the app. The resulting patched `Porsche.exe` is verified against the prepared-executable SHA-256 documented above.
+Everything derived from your game copy is generated locally on your Mac and is never part of this repository.
 
 Compiler/runtime support code has its own third-party notices and restrictions in [third_party](third_party). Building a private app does not add permission to redistribute the game's code or assets.

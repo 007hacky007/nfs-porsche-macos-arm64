@@ -36,8 +36,9 @@ static void guid(uint32_t p,uint32_t first){
 
 static uint32_t enumerate_devices(CPU *c,unsigned type,uint32_t fn,uint32_t context,uint32_t flags){
     uint32_t p=win32_alloc(580,1);
-    /* No device reports force feedback (DIEDFL_FORCEFEEDBACK). */
-    for(unsigned kind=1;kind<=3&&!(flags&0x100);kind++){
+    /* Only the game pad can report force feedback (DIEDFL_FORCEFEEDBACK). */
+    for(unsigned kind=1;kind<=3;kind++){
+        if((flags&0x100)&&(kind!=3||!force_enabled()))continue;
         unsigned devtype=kind==1?3:kind==2?2:JOYSTICK_DEVTYPE;
         if(type && type!=(devtype&0xff))continue;
         if(kind==3&&!joystick_available())continue;
@@ -97,12 +98,12 @@ void com_call(CPU *c,uint32_t thunk){
         nargs=3;uint32_t iid=A(c,1),out=A(c,2);uint32_t first=*(uint32_t *)guest_ptr(iid,16);
         if(first==0 || (family==1&&(first==0x89521360||first==0x5944e662||first==0x9a4cb684))
            || (family==2&&(first==0x5944e680||first==0x5944e682||first==0x57d7c6bc))
-           || (family==4&&first==0x279afa83) || (family==5&&(first==0x279afa85||first==0x6825a449))){
+           || (family==3&&first==0xe7e1f7c0) || (family==4&&first==0x279afa83) || (family==5&&(first==0x279afa85||first==0x6825a449))){
             *(uint32_t *)guest_ptr(out,4)=self;MR32(self+8)++;
         }else{*(uint32_t *)guest_ptr(out,4)=0;r=0x80004002;fprintf(stderr,"unavailable COM IID %08x\n",first);}
     }
     else if(slot==1)r=++MR32(self+8);
-    else if(slot==2){r=--MR32(self+8);if(!r){if(family==2)input_set_event((int)kind,0);if(family==5){void sound_release(uint32_t);sound_release(self);}gheap_free(1,self);}}
+    else if(slot==2){r=--MR32(self+8);if(!r){if(family==2)input_set_event((int)kind,0);if(family==3)force_release(self);if(family==5){void sound_release(uint32_t);sound_release(self);}gheap_free(1,self);}}
     else if(family==1){
         if(slot==3){
             nargs=4;uint32_t first=*(uint32_t *)guest_ptr(A(c,1),16),out=A(c,2);
@@ -164,14 +165,19 @@ void com_call(CPU *c,uint32_t thunk){
         else if(slot==15){nargs=2;uint32_t p=A(c,1),size=*(uint32_t *)guest_ptr(p,4);if(size<560||size>580)r=0x80070057;else{memset(guest_ptr(p,size),0,size);MR32(p)=size;guid(p+4,kind==1?0x6f1d2b61:0x6f1d2b60);guid(p+20,kind==1?0x6f1d2b61:0x6f1d2b60);MR32(p+36)=kind==1?3:2;strcpy((char *)g_mem+p+40,kind==1?"Keyboard":"Mouse");strcpy((char *)g_mem+p+300,kind==1?"Native Keyboard":"Native Mouse");}}
         else if(slot==16){nargs=3;r=0;}
         else if(slot==17){nargs=4;r=0;}
-        /* IDirectInputDevice2 force feedback: no device supports effects. */
-        else if(slot==18){nargs=5;if(mem_valid(A(c,3),4))MR32(A(c,3))=0;r=0x80004001;}
+        /* IDirectInputDevice2 force feedback: only the game pad plays effects (force.c). */
+        else if(slot==18){nargs=5;if(kind==3)r=force_create_effect(A(c,1),A(c,2),A(c,3));else{if(mem_valid(A(c,3),4))MR32(A(c,3))=0;r=0x80004001;}}
         else if(slot==19||slot==23){nargs=4;r=0;}
         else if(slot==20){nargs=3;r=0x80004001;}
+        else if(slot==21&&kind==3){nargs=2;r=force_state(A(c,1));}
+        else if(slot==22&&kind==3){nargs=2;r=force_command(A(c,1));}
         else if(slot==21||slot==22||slot==24){nargs=2;r=0x80004001;}
         else if(slot==25)r=0;
         else if(slot==26){nargs=5;r=0x80004001;}
         else runtime_fail(c,"DirectInput device method",thunk);
+    }
+    else if(family==3){
+        if(!force_effect_method(c,self,slot,&r,&nargs))runtime_fail(c,"DirectInput effect method",thunk);
     }
     else if(family==4||family==5){
         int sound_method(CPU *,uint32_t,unsigned,uint32_t *,uint32_t *);

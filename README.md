@@ -17,7 +17,7 @@ Play **Need for Speed: Porsche Unleashed** natively on your Apple Silicon Mac, b
 - Fullscreen by default. Control-Command-F, F11 or the green window button switches between fullscreen and a window while you play.
 - The original in-game pointer. The Mac cursor is hidden inside the game view by default and comes back outside the window.
 - Keyboard and mouse controls, and Command-V or Control-V to paste text.
-- Game controllers: PS4 (DualShock 4), PS5 (DualSense), Xbox, Switch Pro and other Mac-supported gamepads, over Bluetooth or USB. See [Game controllers](#game-controllers).
+- Game controllers: PS4 (DualShock 4), PS5 (DualSense), Xbox, Switch Pro and other Mac-supported gamepads, over Bluetooth or USB, with vibration. See [Game controllers](#game-controllers).
 - Switching to another app releases held controls and keeps the picture and sound running without restarting the song.
 - Your own saves, kept apart from the game files, which stay unchanged.
 
@@ -74,6 +74,7 @@ Open NFSV.app. The launcher appears first:
 - **HUD size**: try 75% for a smaller HUD in 4K; 100% keeps the full automatic size.
 - **Hide macOS cursor while playing**: on by default.
 - **Enhanced graphics**: smoother edges and sharper textures, on by default. Turn it off for the original look or a higher frame rate on older Macs.
+- **Controller vibration**: plays the game's force feedback on a game controller, on by default.
 
 Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
 
@@ -95,7 +96,9 @@ In the game, open **options... > controllers > game controls**, set **default co
 | Cameras | Share / View | Button 6 |
 | Shift up, down | R1 / RB, L1 / LB | Button 8, Button 9 |
 
-Any control can be rebound on the same screen: click it, then press a button or move a stick or trigger. The other buttons are Circle / B (Button 2), Options / Menu (Button 5), the left stick button (Button 7) and the right stick button (Button 10). The left stick's vertical movement is the z axis, the right stick is the x and y rotation axes, and the D-pad is the hat switch. The triggers share one axis, as Xbox pads do under DirectInput on Windows, so pressing both at once cancels out. The **deadzone** tab adjusts each axis. Force feedback and vibration are not supported.
+Any control can be rebound on the same screen: click it, then press a button or move a stick or trigger. The other buttons are Circle / B (Button 2), Options / Menu (Button 5), the left stick button (Button 7) and the right stick button (Button 10). The left stick's vertical movement is the z axis, the right stick is the x and y rotation axes, and the D-pad is the hat switch. The triggers share one axis, as Xbox pads do under DirectInput on Windows, so pressing both at once cancels out. The **deadzone** tab adjusts each axis.
+
+**Vibration** plays the game's own force feedback on the controller's motors: collisions and hard landings on the heavy motor, the road surface and the engine on the light one. The game's **force feedback** tab sets the strength: **stick volume** for everything, then **collision**, **road effects** and **engine** (set **engine** to 0% to drop the idle buzz). **Road grip** is a steering-wheel force with nothing to vibrate on a pad. Vibration needs macOS 11 or newer and a controller with motors that macOS supports, such as DualShock 4, DualSense and Xbox controllers. Turn it off with **Controller vibration** in the launcher.
 
 The first connected controller is used. While another app is in front, the controller is ignored, like the keyboard.
 
@@ -160,7 +163,7 @@ If a checksum fails, use a complete, unmodified supported copy. Renaming an unsu
 
 ## Launcher settings
 
-The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, macOS cursor visibility and enhanced graphics. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
+The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, macOS cursor visibility, enhanced graphics and controller vibration. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
 
 - **HUD size** ranges from 25% to 100% of the automatic resolution scaling, with the original HUD size as a minimum. Try 75% for a smaller HUD in 4K; 100% keeps the full automatic size.
 - **Use in-game setting** lets the game's graphics menu control race resolution; choosing a specific launcher resolution overrides that setting for the session and selects 32-bit color when available. Menus and movies keep their original resolution.
@@ -239,7 +242,7 @@ The builder creates a different `Porsche.exe` in its private prepared folder by 
 
 ## Limitations
 
-Menus and movies retain their source artwork and aspect ratio. Higher race resolutions do not add detail to that artwork. Menus, driving, sound and intro playback have been exercised; complete career progression, every patched car/track and long sessions still need play testing. Internet multiplayer is not established by this port, and game controllers have no force feedback.
+Menus and movies retain their source artwork and aspect ratio. Higher race resolutions do not add detail to that artwork. Menus, driving, sound and intro playback have been exercised; complete career progression, every patched car/track and long sessions still need play testing. Internet multiplayer is not established by this port.
 
 ## Legal and notices
 

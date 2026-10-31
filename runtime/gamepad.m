@@ -8,11 +8,20 @@
    While another app is active the pad reads neutral, like the keyboard,
    so a held trigger or stick cannot stay applied after switching apps.
 
+   Rumble: force.c sets two motor levels whenever the game polls the pad.
+   A 40 Hz timer on the same queue plays them through the controller's
+   haptics (CoreHaptics), on the left and right handles where the
+   controller has both (DualShock 4, DualSense, Xbox), otherwise on one
+   engine. The motors stop when the levels go stale, the app is in the
+   background or the controller disconnects.
+
      NFSV_PAD=0                    no game controller device at all
      NFSV_PAD_DEADZONE=<f>         radial stick dead zone (default 0.08)
      NFSV_PAD_TRIGGER_DEADZONE=<f> trigger dead zone (default 0.02)
+     NFSV_PAD_RUMBLE=0             no vibration
      NFSV_PAD_LOG=1                log controllers connecting and disconnecting */
 #import <Cocoa/Cocoa.h>
+#import <CoreHaptics/CoreHaptics.h>
 #import <GameController/GameController.h>
 #include <os/lock.h>
 #include <math.h>
@@ -29,6 +38,14 @@ static unsigned generation;           /* bumped under the lock when the active c
 static GCController *active;          /* main thread only */
 static NSMutableArray *order;         /* connected controllers, oldest first */
 static dispatch_queue_t queue;
+static float rumble_target[2];        /* under the lock */
+static uint64_t rumble_time;          /* when force.c last set them, under the lock */
+/* Haptics, on the queue only. */
+static CHHapticEngine *engines[2];
+static id<CHHapticAdvancedPatternPlayer> players[2];
+static float applied[2];
+static unsigned motor_count;
+static dispatch_source_t rumble_timer;
 
 static int env_flag(const char *name, int fallback){
     const char *value = getenv(name);
@@ -46,6 +63,95 @@ int gamepad_enabled(void){
     static int enabled = -1;
     if (enabled < 0) enabled = env_flag("NFSV_PAD", 1);
     return enabled;
+}
+int gamepad_rumble_enabled(void){
+    static int enabled = -1;
+    if (enabled < 0) enabled = env_flag("NFSV_PAD_RUMBLE", 1);
+    return enabled;
+}
+static uint64_t now_ms(void){ return clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1000000u; }
+
+/* ---- rumble (queue) ---- */
+static id<CHHapticAdvancedPatternPlayer> make_player(CHHapticEngine *engine){
+    NSError *error = nil;
+    CHHapticEventParameter *intensity = [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticIntensity value:1.f];
+    CHHapticEventParameter *sharpness = [[CHHapticEventParameter alloc] initWithParameterID:CHHapticEventParameterIDHapticSharpness value:0.5f];
+    CHHapticEvent *event = [[CHHapticEvent alloc] initWithEventType:CHHapticEventTypeHapticContinuous
+                                                         parameters:@[intensity, sharpness] relativeTime:0 duration:GCHapticDurationInfinite];
+    CHHapticPattern *pattern = [[CHHapticPattern alloc] initWithEvents:@[event] parameters:@[] error:&error];
+    id<CHHapticAdvancedPatternPlayer> player = pattern ? [engine createAdvancedPlayerWithPattern:pattern error:&error] : nil;
+    if (!player) fprintf(stderr, "controller vibration unavailable: %s\n", error.localizedDescription.UTF8String ?: "?");
+    return player;
+}
+static void motors_detach(void){
+    for (unsigned i = 0; i < motor_count; i++){
+        if (applied[i] > 0.f) [players[i] stopAtTime:CHHapticTimeImmediate error:nil];
+        [engines[i] stopWithCompletionHandler:nil];
+        engines[i] = nil; players[i] = nil; applied[i] = 0.f;
+    }
+    motor_count = 0;
+}
+static void motors_restart(unsigned i){
+    if (![engines[i] startAndReturnError:nil]) return;
+    players[i] = make_player(engines[i]);
+    applied[i] = 0.f;
+}
+static void motors_attach(GCController *controller){
+    motors_detach();
+    GCDeviceHaptics *haptics = controller.haptics;
+    if (!haptics) return;
+    NSSet<GCHapticsLocality> *places = haptics.supportedLocalities;
+    NSArray<GCHapticsLocality> *wanted = [places containsObject:GCHapticsLocalityLeftHandle] && [places containsObject:GCHapticsLocalityRightHandle]
+        ? @[GCHapticsLocalityLeftHandle, GCHapticsLocalityRightHandle] : @[GCHapticsLocalityDefault];
+    for (GCHapticsLocality place in wanted){
+        CHHapticEngine *engine = [haptics createEngineWithLocality:place];
+        if (!engine || ![engine startAndReturnError:nil]) continue;
+        unsigned i = motor_count;
+        engine.resetHandler = ^{ dispatch_async(queue, ^{ if (i < motor_count && engines[i] == engine) motors_restart(i); }); };
+        engines[i] = engine; players[i] = make_player(engine); applied[i] = 0.f;
+        if (players[i]) motor_count++;
+        else engines[i] = nil;
+    }
+    if (logging) fprintf(stderr, "game controller vibration: %u motor(s)\n", motor_count);
+}
+static void motor_set(unsigned i, float level){
+    if (fabsf(level - applied[i]) < 0.02f && (level > 0.f) == (applied[i] > 0.f)) return;
+    NSError *error = nil;
+    if (level <= 0.f){
+        [players[i] stopAtTime:CHHapticTimeImmediate error:nil];
+        applied[i] = 0.f;
+        return;
+    }
+    if (applied[i] <= 0.f && ![players[i] startAtTime:CHHapticTimeImmediate error:&error]){
+        motors_restart(i);   /* the engine stopped (sleep, audio session); start it again */
+        if (!players[i] || ![players[i] startAtTime:CHHapticTimeImmediate error:&error]) return;
+    }
+    CHHapticDynamicParameter *intensity = [[CHHapticDynamicParameter alloc]
+        initWithParameterID:CHHapticDynamicParameterIDHapticIntensityControl value:level relativeTime:0];
+    [players[i] sendParameters:@[intensity] atTime:CHHapticTimeImmediate error:&error];
+    applied[i] = level;
+}
+static void rumble_tick(void){
+    if (!motor_count) return;
+    os_unfair_lock_lock(&lock);
+    float strong = rumble_target[0], weak = rumble_target[1];
+    if (!app_active || now_ms() - rumble_time > 150) strong = weak = 0.f;
+    os_unfair_lock_unlock(&lock);
+    if (motor_count == 2){ motor_set(0, strong); motor_set(1, weak); }
+    else motor_set(0, fmaxf(strong, weak));
+}
+void gamepad_rumble(float strong, float weak){
+    if (!gamepad_rumble_enabled()) return;
+    os_unfair_lock_lock(&lock);
+    int rising = strong > rumble_target[0] + 0.1f || weak > rumble_target[1] + 0.1f;
+    rumble_target[0] = strong; rumble_target[1] = weak; rumble_time = now_ms();
+    os_unfair_lock_unlock(&lock);
+    if (rising && queue) dispatch_async(queue, ^{ rumble_tick(); });   /* jolts start without waiting for the timer */
+}
+void gamepad_rumble_target(float *strong, float *weak){
+    os_unfair_lock_lock(&lock);
+    *strong = rumble_target[0]; *weak = rumble_target[1];
+    os_unfair_lock_unlock(&lock);
 }
 
 static void copy_state(GCExtendedGamepad *pad, unsigned expected){
@@ -106,11 +212,18 @@ static void pick_active(void){
         refresh();
     }
     fprintf(stderr, "game controller: %s\n", best ? real_pad.name : "none");
+    if (gamepad_rumble_enabled()) dispatch_async(queue, ^{ motors_attach(best); });
 }
 
 static void setup(void){
     order = [NSMutableArray array];
     queue = dispatch_queue_create("org.nfsv.gamepad", DISPATCH_QUEUE_SERIAL);
+    if (gamepad_rumble_enabled()){
+        rumble_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+        dispatch_source_set_timer(rumble_timer, DISPATCH_TIME_NOW, NSEC_PER_SEC / 40, NSEC_PER_MSEC * 5);
+        dispatch_source_set_event_handler(rumble_timer, ^{ rumble_tick(); });
+        dispatch_resume(rumble_timer);
+    }
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
     NSOperationQueue *main = NSOperationQueue.mainQueue;
     [center addObserverForName:GCControllerDidConnectNotification object:nil queue:main usingBlock:^(NSNotification *note){

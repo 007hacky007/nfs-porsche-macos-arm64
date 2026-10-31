@@ -6,6 +6,7 @@
 @property(nonatomic,strong) NSButton *fullscreen;
 @property(nonatomic,strong) NSButton *hideCursor;
 @property(nonatomic,strong) NSButton *enhancedGraphics;
+@property(nonatomic,strong) NSButton *vibration;
 - (instancetype)initWithDefaults:(NSUserDefaults *)defaults;
 - (void)saveToDefaults:(NSUserDefaults *)defaults;
 @end

@@ -21,6 +21,7 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
     environment[@"NFSV_FULLSCREEN"]=boolean_setting(defaults,@"LaunchFullscreen",YES)?@"1":@"0";
     environment[@"NFSV_HIDE_CURSOR"]=boolean_setting(defaults,@"LaunchHideCursor",YES)?@"1":@"0";
     environment[@"NFSV_ENHANCED_GRAPHICS"]=boolean_setting(defaults,@"LaunchEnhancedGraphics",YES)?@"1":@"0";
+    environment[@"NFSV_PAD_RUMBLE"]=boolean_setting(defaults,@"LaunchControllerVibration",YES)?@"1":@"0";
     environment[@"NFSV_HUD_SCALE"]=[@(hud_scale_setting(defaults)) stringValue];
     return environment;
 }
@@ -34,10 +35,10 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
     self.hudScale.accessibilityValueDescription=hudSizeValue.stringValue;
 }
 - (instancetype)initWithDefaults:(NSUserDefaults *)defaults{
-    if((self=[super initWithFrame:NSMakeRect(0,0,390,254)])){
+    if((self=[super initWithFrame:NSMakeRect(0,0,390,284)])){
         NSDictionary *settings=launcher_environment(defaults,@{});
-        NSTextField *label=[NSTextField labelWithString:@"Race resolution:"];label.frame=NSMakeRect(0,221,140,22);[self addSubview:label];
-        self.resolution=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(145,218,245,28) pullsDown:NO];
+        NSTextField *label=[NSTextField labelWithString:@"Race resolution:"];label.frame=NSMakeRect(0,251,140,22);[self addSubview:label];
+        self.resolution=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(145,248,245,28) pullsDown:NO];
         self.resolution.accessibilityLabel=@"Race resolution";
         [self.resolution addItemWithTitle:@"Use in-game setting"];self.resolution.lastItem.representedObject=@"";
         for(unsigned i=0;i<DISPLAY_MODE_COUNT;i++){
@@ -47,8 +48,8 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
             if([settings[@"NFSV_RESOLUTION"] isEqual:value])[self.resolution selectItem:self.resolution.lastItem];
         }
         [self addSubview:self.resolution];
-        label=[NSTextField labelWithString:@"Frame-rate limit:"];label.frame=NSMakeRect(0,185,140,22);[self addSubview:label];
-        self.frameLimit=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(145,182,245,28) pullsDown:NO];
+        label=[NSTextField labelWithString:@"Frame-rate limit:"];label.frame=NSMakeRect(0,215,140,22);[self addSubview:label];
+        self.frameLimit=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(145,212,245,28) pullsDown:NO];
         self.frameLimit.accessibilityLabel=@"Frame-rate limit";
         for(NSNumber *limit in @[@0,@30,@60,@120]){
             [self.frameLimit addItemWithTitle:limit.intValue?[NSString stringWithFormat:@"%@ FPS",limit]:@"Game default"];
@@ -56,21 +57,24 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
             if([settings[@"NFSV_FPS_LIMIT"] intValue]==limit.intValue)[self.frameLimit selectItem:self.frameLimit.lastItem];
         }
         [self addSubview:self.frameLimit];
-        label=[NSTextField labelWithString:@"HUD size:"];label.frame=NSMakeRect(0,149,140,22);[self addSubview:label];
+        label=[NSTextField labelWithString:@"HUD size:"];label.frame=NSMakeRect(0,179,140,22);[self addSubview:label];
         self.hudScale=[NSSlider sliderWithValue:[settings[@"NFSV_HUD_SCALE"] doubleValue] minValue:25 maxValue:100 target:self action:@selector(updateHUDSize:)];
-        self.hudScale.frame=NSMakeRect(145,147,185,24);self.hudScale.continuous=YES;
+        self.hudScale.frame=NSMakeRect(145,177,185,24);self.hudScale.continuous=YES;
         self.hudScale.accessibilityLabel=@"HUD size";
         self.hudScale.toolTip=@"Percentage of the resolution-scaled HUD size. Never smaller than the original HUD.";
         [self addSubview:self.hudScale];
-        hudSizeValue=[NSTextField labelWithString:@""];hudSizeValue.frame=NSMakeRect(335,149,55,22);
+        hudSizeValue=[NSTextField labelWithString:@""];hudSizeValue.frame=NSMakeRect(335,179,55,22);
         hudSizeValue.alignment=NSTextAlignmentRight;[self addSubview:hudSizeValue];[self updateHUDSize:nil];
-        self.fullscreen=[NSButton checkboxWithTitle:@"Start in fullscreen" target:nil action:nil];self.fullscreen.frame=NSMakeRect(0,111,390,24);
+        self.fullscreen=[NSButton checkboxWithTitle:@"Start in fullscreen" target:nil action:nil];self.fullscreen.frame=NSMakeRect(0,141,390,24);
         self.fullscreen.state=[settings[@"NFSV_FULLSCREEN"] boolValue]?NSControlStateValueOn:NSControlStateValueOff;[self addSubview:self.fullscreen];
-        self.hideCursor=[NSButton checkboxWithTitle:@"Hide macOS cursor while playing" target:nil action:nil];self.hideCursor.frame=NSMakeRect(0,81,390,24);
+        self.hideCursor=[NSButton checkboxWithTitle:@"Hide macOS cursor while playing" target:nil action:nil];self.hideCursor.frame=NSMakeRect(0,111,390,24);
         self.hideCursor.state=[settings[@"NFSV_HIDE_CURSOR"] boolValue]?NSControlStateValueOn:NSControlStateValueOff;[self addSubview:self.hideCursor];
-        self.enhancedGraphics=[NSButton checkboxWithTitle:@"Enhanced graphics (4x antialiasing, 16x filtering)" target:nil action:nil];self.enhancedGraphics.frame=NSMakeRect(0,51,390,24);
+        self.enhancedGraphics=[NSButton checkboxWithTitle:@"Enhanced graphics (4x antialiasing, 16x filtering)" target:nil action:nil];self.enhancedGraphics.frame=NSMakeRect(0,81,390,24);
         self.enhancedGraphics.toolTip=@"Smooths jagged edges and keeps road textures sharp at an angle, as the Combined Patch recommends. Turn off for the original look or more speed.";
         self.enhancedGraphics.state=[settings[@"NFSV_ENHANCED_GRAPHICS"] boolValue]?NSControlStateValueOn:NSControlStateValueOff;[self addSubview:self.enhancedGraphics];
+        self.vibration=[NSButton checkboxWithTitle:@"Controller vibration" target:nil action:nil];self.vibration.frame=NSMakeRect(0,51,390,24);
+        self.vibration.toolTip=@"Plays the game's force feedback (crashes, road surface, engine) on the game controller's motors. Each effect has its own setting on the game's force feedback tab.";
+        self.vibration.state=[settings[@"NFSV_PAD_RUMBLE"] boolValue]?NSControlStateValueOn:NSControlStateValueOff;[self addSubview:self.vibration];
         label=[NSTextField wrappingLabelWithString:@"Menus and movies keep their original resolution.\nUse the in-game setting to let the game choose race resolution."];
         label.font=[NSFont systemFontOfSize:NSFont.smallSystemFontSize];label.textColor=NSColor.secondaryLabelColor;
         label.frame=NSMakeRect(0,0,390,38);[self addSubview:label];
@@ -84,6 +88,7 @@ NSDictionary *launcher_environment(NSUserDefaults *defaults,NSDictionary *inheri
     [defaults setBool:self.fullscreen.state==NSControlStateValueOn forKey:@"LaunchFullscreen"];
     [defaults setBool:self.hideCursor.state==NSControlStateValueOn forKey:@"LaunchHideCursor"];
     [defaults setBool:self.enhancedGraphics.state==NSControlStateValueOn forKey:@"LaunchEnhancedGraphics"];
+    [defaults setBool:self.vibration.state==NSControlStateValueOn forKey:@"LaunchControllerVibration"];
 }
 @end
 

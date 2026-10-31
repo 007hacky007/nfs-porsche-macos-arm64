@@ -30,6 +30,14 @@ int gamepad_enabled(void);
 void gamepad_init(void);
 /* The pad after dead zones, neutral while the game is not the active app. */
 int gamepad_read(PadState *state);
+/* 0 when NFSV_PAD_RUMBLE is 0, off, no or false (the launcher's switch). */
+int gamepad_rumble_enabled(void);
+/* Motor levels 0..1: strong is the heavy low-frequency motor (left), weak
+   the light one (right). Called whenever the game polls the pad; the
+   motors stop by themselves when the updates stop, so a paused or quit
+   game cannot leave them running. */
+void gamepad_rumble(float strong, float weak);
+void gamepad_rumble_target(float *strong, float *weak);
 
 void gamepad_synth_connect(int on);
 void gamepad_synth_button(int button, int down);

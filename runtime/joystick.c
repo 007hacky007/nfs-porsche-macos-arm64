@@ -10,8 +10,10 @@
    is connected; a controller can then be connected at any time.
 
    The device is a gamepad (DIDEVTYPEJOYSTICK_GAMEPAD); the game gives
-   wheels (subtype 6) a different steering path. Force feedback is not
-   reported, so the game skips its effects.
+   wheels (subtype 6) a different steering path. With vibration on, the X
+   and Y axes are force-feedback actuators and force.c plays the game's
+   effects on the controller's motors; with it off the device reports no
+   force feedback and the game skips its effects.
 
    The layout fits the game's own joystick defaults (its "reset defaults"
    button): steering on X, accelerate and brake on Y up and down, hand brake
@@ -42,6 +44,9 @@ void gheap_free(int, uint32_t);
 #define DIDFT_PSHBUTTON 0x04u
 #define DIDFT_POV 0x10u
 #define DIDOI_ASPECTPOSITION 0x100u
+#define DIDOI_FFACTUATOR 0x1u
+#define DIDFT_FFACTUATOR 0x01000000u
+#define DIDC_FORCEFEEDBACK 0x100u
 
 enum { AXES = 5, POVS = 1, BUTTONS = 10, OBJECTS = AXES + POVS + BUTTONS };
 static const uint32_t axis_guid[AXES] = {0xa36d02e0, 0xa36d02e1, 0xa36d02e2, 0xa36d02f4, 0xa36d02f5};
@@ -70,6 +75,7 @@ int joystick_matches_guid(uint32_t p){
 }
 void joystick_reset(void){
     for (unsigned i = 0; i < AXES; i++){ range_min[i] = 0; range_max[i] = 65535; deadzone[i] = 0; saturation[i] = 10000; }
+    force_reset();
 }
 
 uint32_t joystick_device_instance(uint32_t p){
@@ -80,7 +86,10 @@ uint32_t joystick_device_instance(uint32_t p){
     MR32(p + 36) = JOYSTICK_DEVTYPE;
     strcpy((char *)guest_ptr(p + 40, 260), "Game Controller");
     strcpy((char *)guest_ptr(p + 300, 260), "Game Controller");
-    if (size == 580){ MR16(p + 576) = 1; MR16(p + 578) = 5; }   /* HID generic desktop, game pad */
+    if (size == 580){
+        if (force_enabled()) write_guid(p + 560, 0x4e465356, 0x4646, 0x11d0, "\x80\x00" "NFSVFF");   /* guidFFDriver */
+        MR16(p + 576) = 1; MR16(p + 578) = 5;   /* HID generic desktop, game pad */
+    }
     return 0;
 }
 
@@ -88,16 +97,18 @@ uint32_t joystick_caps(uint32_t p){
     uint32_t size = MR32(p);
     if (size != 24 && size != 44) return DIERR_INVALIDPARAM;
     memset(guest_ptr(p, size), 0, size); MR32(p) = size;
-    MR32(p + 4) = 1;   /* DIDC_ATTACHED: always listed, so saved bindings keep their device */
+    MR32(p + 4) = 1 | (force_enabled() ? DIDC_FORCEFEEDBACK : 0);   /* DIDC_ATTACHED: always listed, so saved bindings keep their device */
     MR32(p + 8) = JOYSTICK_DEVTYPE; MR32(p + 12) = AXES; MR32(p + 16) = BUTTONS; MR32(p + 20) = POVS;
+    if (size == 44 && force_enabled()){ MR32(p + 24) = 10000; MR32(p + 28) = 10000; }   /* FF sample period and resolution, us */
     return 0;
 }
 
 static uint32_t object_offset(unsigned i){
     return i < AXES ? 4 * i : i < AXES + POVS ? 0x20 + 4 * (i - AXES) : 0x30 + (i - AXES - POVS);
 }
+static int actuator(unsigned i){ return i < 2 && force_enabled(); }
 static uint32_t object_type(unsigned i){
-    return i < AXES ? DIDFT_ABSAXIS | i << 8 : i < AXES + POVS ? DIDFT_POV | (i - AXES) << 8
+    return i < AXES ? DIDFT_ABSAXIS | i << 8 | (actuator(i) ? DIDFT_FFACTUATOR : 0) : i < AXES + POVS ? DIDFT_POV | (i - AXES) << 8
                                                              : DIDFT_PSHBUTTON | (i - AXES - POVS) << 8;
 }
 static int find_object(uint32_t object, uint32_t how){
@@ -111,12 +122,13 @@ static void fill_object(uint32_t p, uint32_t size, unsigned i){
     memset(guest_ptr(p, size), 0, size); MR32(p) = size;
     object_guid(p + 4, i < AXES ? axis_guid[i] : i < AXES + POVS ? 0xa36d02f2 : 0xa36d02f0);
     MR32(p + 20) = object_offset(i); MR32(p + 24) = object_type(i);
-    MR32(p + 28) = i < AXES ? DIDOI_ASPECTPOSITION : 0;
+    MR32(p + 28) = i < AXES ? DIDOI_ASPECTPOSITION | (actuator(i) ? DIDOI_FFACTUATOR : 0) : 0;
     char *name = guest_ptr(p + 32, 260);
     if (i < AXES) strcpy(name, axis_name[i]);
     else if (i < AXES + POVS) strcpy(name, "Hat Switch");
     else snprintf(name, 260, "Button %u", i - AXES - POVS + 1);
     if (size == 316){
+        if (actuator(i)){ MR32(p + 292) = 10000; MR32(p + 296) = 1; }   /* dwFFMaxForce, dwFFForceResolution */
         MR16(p + 304) = i < AXES + POVS ? 1 : 9;
         MR16(p + 306) = i < AXES ? 0x30 + i : i < AXES + POVS ? 0x39 : i - AXES - POVS + 1;   /* HID X..Rz, hat, button n */
     }
@@ -134,6 +146,7 @@ uint32_t joystick_enum_objects(CPU *c, uint32_t callback, uint32_t context, uint
     uint32_t p = win32_alloc(316, 1);
     for (unsigned i = 0; i < OBJECTS; i++){
         if ((flags & 0xff) && !(object_type(i) & flags & 0xff)) continue;
+        if ((flags & DIDFT_FFACTUATOR) && !(object_type(i) & DIDFT_FFACTUATOR)) continue;
         fill_object(p, 316, i);
         uint32_t args[] = {p, context};
         if (!call_guest(c, callback, 2, args)) break;
@@ -187,7 +200,8 @@ uint32_t joystick_property(uint32_t self, int set, uint32_t property, uint32_t p
         return 0;
     }
     default:  /* force feedback gain, load and autocenter */
-        return DIERR_UNSUPPORTED;
+        if (axis >= 0) return DIERR_INVALIDPARAM;
+        return force_property(set, property, p + 16);
     }
 }
 
@@ -221,5 +235,6 @@ uint32_t joystick_state(void *out, uint32_t size){
     uint32_t hats[4] = {pov(pad.buttons), 0xffffffffu, 0xffffffffu, 0xffffffffu};
     memcpy(bytes + 0x20, hats, sizeof hats);
     for (unsigned i = 0; i < BUTTONS; i++) bytes[0x30 + i] = pad.buttons & 1u << button_source[i] ? 0x80 : 0;
+    force_update();   /* the game polls every frame while it plays effects */
     return 0;
 }

@@ -87,6 +87,9 @@ class BuilderCliTests(unittest.TestCase):
             with patch('tools.downloads.COMBINED_SHA', file_sha256(combined)), \
                     patch('tools.downloads.SILENT_SHA', file_sha256(silent)):
                 self.assertEqual(run('patches', 'status'), (0, [{'patches': 'ready'}]))
+            with patch('tools.downloads.COMBINED_ORIGINAL_SHA', file_sha256(combined)), \
+                    patch('tools.downloads.SILENT_SHA', file_sha256(silent)):
+                self.assertEqual(run('patches', 'status'), (0, [{'patches': 'ready'}]))
 
     def test_patches_fetch_reports_ready_and_error(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'NFSV_CACHE_DIR': tmp}):

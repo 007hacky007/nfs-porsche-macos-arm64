@@ -11,13 +11,14 @@ sys.path.insert(0, str(ROOT))
 from tools import downloads, game_source
 from tools.build_app import cache_directory, emit, source_directory
 
-ARCHIVES = (('NFS5-Combined-Patch-v1.1.zip', 'COMBINED_SHA'), ('SilentPatchNFS90s.zip', 'SILENT_SHA'))
+ARCHIVES = (('NFS5-Combined-Patch-v1.1.zip', ('COMBINED_SHA', 'COMBINED_ORIGINAL_SHA')),
+            ('SilentPatchNFS90s.zip', ('SILENT_SHA',)))
 
 
 def patches_ready():
     cache = cache_directory() / 'patches'
-    return all((cache / name).is_file() and game_source.file_sha256(cache / name) == getattr(downloads, sha)
-               for name, sha in ARCHIVES)
+    return all((cache / name).is_file() and game_source.file_sha256(cache / name) in {getattr(downloads, s) for s in shas}
+               for name, shas in ARCHIVES)
 
 
 def run(args):

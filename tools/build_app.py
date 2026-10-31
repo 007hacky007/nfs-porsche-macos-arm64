@@ -91,7 +91,7 @@ def source_directory(source, temporary_parent):
 
 
 def prepared_game(source, cache, project=ROOT):
-    from tools.downloads import COMBINED_SHA, SILENT_SHA, fetch_patches
+    from tools.downloads import SILENT_SHA, fetch_patches
     from tools.inspect_pe import inspect_pe, require_supported
     from tools.package import windows_icon
     from tools.patches import prepare_game
@@ -108,7 +108,8 @@ def prepared_game(source, cache, project=ROOT):
         print(f'Accepted {original.version}: {original.assets_sha256}', flush=True)
         step('Fetching verified patches (or checking their download cache)', 'patches')
         combined, silent = fetch_patches(cache / 'patches')
-        key = hashlib.sha256((original.assets_sha256 + original.exe_sha256 + COMBINED_SHA + SILENT_SHA).encode()).hexdigest()
+        combined_sha = file_sha256(combined)  # the mirror or the original release archive
+        key = hashlib.sha256((original.assets_sha256 + original.exe_sha256 + combined_sha + SILENT_SHA).encode()).hexdigest()
         destination = local / key
         marker = destination / 'build-input.json'
         if destination.exists():

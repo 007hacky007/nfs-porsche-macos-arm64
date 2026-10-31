@@ -31,7 +31,7 @@ public func macCheck(isAppleSilicon: Bool, version: OperatingSystemVersion) -> C
         return .blocked("NFSV needs a Mac with Apple Silicon")
     }
     guard version.majorVersion >= 12 else {
-        return .blocked("NFSV needs macOS 12 or newer")
+        return .blocked("NFSV Builder needs macOS 12 or newer. On macOS 11, build from Terminal.")
     }
     return .ready("Apple Silicon, macOS \(version.majorVersion).\(version.minorVersion)")
 }

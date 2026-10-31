@@ -28,8 +28,9 @@ show_tab_view = False
 show_toolbar = False
 show_pathbar = False
 show_sidebar = False
-# 540 content + 28 title bar
-window_rect = ((200, 120), (760, 568))
+# 600 background + 28 title bar; the bottom 60 px are blank so Finder's
+# path bar and status bar (if enabled) never cover the notes.
+window_rect = ((200, 120), (760, 628))
 default_view = "icon-view"
 icon_size = 86
 text_size = 12

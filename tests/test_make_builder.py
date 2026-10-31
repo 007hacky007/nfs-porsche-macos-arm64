@@ -27,8 +27,8 @@ class MakeBuilderTests(unittest.TestCase):
         self.assertEqual(bundled, declared)
 
     def test_minos_parser(self):
-        out = 'Load command 9\n      cmd LC_BUILD_VERSION\n    platform 1\n       minos 11.0\n         sdk 15.0\n'
-        self.assertEqual(make_builder.parse_minos(out), '11.0')
+        out = 'Load command 9\n      cmd LC_BUILD_VERSION\n    platform 1\n       minos 12.0\n         sdk 15.0\n'
+        self.assertEqual(make_builder.parse_minos(out), '12.0')
 
 
 if __name__ == '__main__':

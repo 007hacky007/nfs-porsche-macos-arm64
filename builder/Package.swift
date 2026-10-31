@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "NFSVBuilder",
-    platforms: [.macOS(.v11)],
+    platforms: [.macOS(.v12)],
     targets: [
         .target(name: "BuilderCore"),
         .executableTarget(name: "NFSVBuilder", dependencies: ["BuilderCore"]),

@@ -11,9 +11,9 @@ final class CoreTests: XCTestCase {
         s.removeValue(forKey: .diskSpace); s[.gameCopy] = .ready("ok"); XCTAssertFalse(canBuild(s))
     }
     func testMacCheck() {
-        XCTAssertEqual(macCheck(isAppleSilicon: true, version: .init(majorVersion: 11, minorVersion: 0, patchVersion: 0)).isReady, true)
+        XCTAssertEqual(macCheck(isAppleSilicon: true, version: .init(majorVersion: 12, minorVersion: 0, patchVersion: 0)).isReady, true)
         if case .blocked = macCheck(isAppleSilicon: false, version: .init(majorVersion: 15, minorVersion: 0, patchVersion: 0)) {} else { XCTFail() }
-        if case .blocked = macCheck(isAppleSilicon: true, version: .init(majorVersion: 10, minorVersion: 15, patchVersion: 7)) {} else { XCTFail() }
+        if case .blocked = macCheck(isAppleSilicon: true, version: .init(majorVersion: 11, minorVersion: 7, patchVersion: 0)) {} else { XCTFail() }
     }
     func testParsePipelineLines() {
         XCTAssertEqual(parsePipelineLine(#"NFSV-EVENT {"step":"compile","title":"Compiling native ARM64 code"}"#), .step(id: "compile", title: "Compiling native ARM64 code"))

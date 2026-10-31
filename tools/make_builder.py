@@ -10,8 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ENTRIES = ('build.sh', 'requirements.txt', 'tools', 'runtime', 'launcher', 'third_party')
-MIN_MACOS = '11.0'
-SWIFT_TARGET = f'arm64-apple-macos{MIN_MACOS}'
+MIN_MACOS = '12.0'
 
 
 def build_sources(root):
@@ -27,8 +26,7 @@ def parse_minos(otool_output):
 
 
 def build_binary(root):
-    cmd = ['swift', 'build', '--package-path', str(root / 'builder'), '-c', 'release',
-           '-Xswiftc', '-target', '-Xswiftc', SWIFT_TARGET]  # plain --triple would be raised to macOS 12
+    cmd = ['swift', 'build', '--package-path', str(root / 'builder'), '-c', 'release', '--arch', 'arm64']
     subprocess.run(cmd, check=True)
     shown = subprocess.run(cmd + ['--show-bin-path'], check=True, capture_output=True, text=True).stdout.strip()
     binary = Path(shown) / 'NFSVBuilder'

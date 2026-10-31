@@ -4,11 +4,35 @@ Build your own macOS version of **Need for Speed: Porsche Unleashed** with nativ
 
 **This repository contains no EA game code, game executable, translated game functions or game assets. You must supply your own PC game copy.** The build script checks your files, downloads the required patches and translates the game locally. Downloaded patches, extracted files, generated code and finished apps are not tracked in git.
 
+## Easiest way: NFSV Builder
+
+NFSV Builder is a small app that installs what is missing and builds NFSV.app from your own game copy. It needs an Apple Silicon Mac with **macOS 12 or newer**. On macOS 11, use [Build from Terminal](#build-from-terminal) instead.
+
+1. Download `NFSV-Builder.dmg` from the Releases page of this repository and open it.
+2. Run **NFSV Builder** from the opened disk. You do not need to copy it anywhere.
+3. macOS says it cannot be opened. Click **Done**.
+4. Open **System Settings**, then **Privacy & Security**, and scroll down.
+5. Click **Open Anyway**.
+
+On macOS 14 or older, right-click **NFSV Builder** and choose **Open** instead. NFSV Builder is free and open source but not signed by Apple, so macOS asks once. The same steps are drawn on the disk's background.
+
+The Builder shows a checklist:
+
+- **Mac**: Apple Silicon and a supported macOS version.
+- **Xcode command line tools**: **Install...** opens Apple's installer (about 2 GB).
+- **Build tools**: the Builder downloads its own private Python (about 90 MB) into `~/Library/Application Support/NFSV Builder`. It never touches other Python installs.
+- **Patches**: downloaded during the build if they are not already cached.
+- **Game copy**: click **Choose...** or drag a folder, `.iso`, `.bin` or `.cue` onto the window.
+- **Destination**: where NFSV.app is placed. The default is Applications.
+- **Free disk space**: enough room for the build.
+
+Fix the red rows, then click **Build NFSV.app**. When it finishes you can click **Play**, **Show in Finder** or **Remove build files**. The Builder shares the patch cache `~/Library/Caches/NFSV/patches` with `./build.sh`.
+
 ## What you need
 
-- An Apple Silicon Mac, macOS 11 or newer.
-- Xcode command line tools. Install them once with `xcode-select --install`.
-- An ARM64 installation of Python 3.10 or newer, available as `python3`.
+- An Apple Silicon Mac. NFSV Builder needs macOS 12 or newer; the Terminal build and the game it produces support macOS 11 or newer.
+- Xcode command line tools. NFSV Builder offers to install them; for the Terminal build, install them once with `xcode-select --install`. These are the only part that comes from Apple.
+- Python: NFSV Builder installs its own. The Terminal build needs an ARM64 installation of Python 3.10 or newer, available as `python3`.
 - Internet access for the first build's Python dependencies and patches.
 - Your own supported English USA PC copy of the game, as a folder, ISO or BIN/CUE image.
 
@@ -18,9 +42,9 @@ Compatibility is checked on the extracted files: both the game-data fingerprint 
 
 The script prepares the v3.5-based executable from Combined Patch v1.1 automatically. Do not install patches or find a replacement executable yourself.
 
-## Build
+## Build from Terminal
 
-In Terminal, enter the repository folder:
+For power users and LLM agents. In Terminal, enter the repository folder:
 
 ```sh
 cd /path/to/NFSV

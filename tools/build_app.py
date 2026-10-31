@@ -19,15 +19,32 @@ from tools.disc import Disc
 from tools.game_source import assets_digest, file_sha256, game_files, verify_game
 
 
-def step(message):
+PROGRESS = False
+
+
+def emit(event):
+    print('NFSV-EVENT ' + json.dumps(event), flush=True)
+
+
+def step(message, ident=None):
     print(f'\n{message}', flush=True)
+    if PROGRESS and ident:
+        emit({'step': ident, 'title': message})
 
 
-def preflight():
+def cache_directory():
+    return Path(os.environ.get('NFSV_CACHE_DIR', str(Path.home() / 'Library/Caches/NFSV')))
+
+
+def check_platform():
     if platform.system() != 'Darwin' or platform.machine() != 'arm64':
         raise ValueError('building requires an Apple Silicon Mac and an ARM64 Python installation')
     if sys.version_info < (3, 10):
         raise ValueError('Python 3.10 or newer is required')
+
+
+def preflight():
+    check_platform()
     if not shutil.which('xcrun') or not shutil.which('codesign'):
         raise ValueError('install Xcode command line tools with: xcode-select --install')
     result = subprocess.run(['xcrun', '--find', 'clang'], capture_output=True, text=True)
@@ -65,7 +82,7 @@ def source_directory(source, temporary_parent):
         raise ValueError('select a game folder, .iso, .bin or .cue file')
     with tempfile.TemporaryDirectory(prefix='.extract-', dir=temporary_parent) as temporary:
         destination = Path(temporary) / 'disc'
-        step(f'Extracting {source.name}')
+        step(f'Extracting {source.name}', 'extract')
         with Disc(source) as disc:
             disc.extract(destination)
         yield destination
@@ -83,11 +100,11 @@ def prepared_game(source, cache, project=ROOT):
     local = project / 'local/builds'
     local.mkdir(parents=True, exist_ok=True)
     with source_directory(source, local) as folder:
-        step('Checking all game-data and source-executable checksums')
+        step('Checking all game-data and source-executable checksums', 'verify')
         original = verify_game(folder)
         icon = windows_icon(original.files[Path('Porsche.exe')])
         print(f'Accepted {original.version}: {original.assets_sha256}', flush=True)
-        step('Fetching verified patches (or checking their download cache)')
+        step('Fetching verified patches (or checking their download cache)', 'patches')
         combined, silent = fetch_patches(cache / 'patches')
         key = hashlib.sha256((original.assets_sha256 + original.exe_sha256 + COMBINED_SHA + SILENT_SHA).encode()).hexdigest()
         destination = local / key
@@ -103,7 +120,7 @@ def prepared_game(source, cache, project=ROOT):
             (destination / 'OriginalGame.ico').write_bytes(icon)
             print('Reusing verified prepared game files.', flush=True)
             return destination
-        step('Applying Combined Patch v1.1 and preparing native patch behavior')
+        step('Applying Combined Patch v1.1 and preparing native patch behavior', 'prepare')
         with tempfile.TemporaryDirectory(prefix='.prepare-', dir=local) as temporary:
             working = Path(temporary) / 'game'
             report = prepare_game(folder, combined, silent, working)
@@ -123,23 +140,35 @@ def prepared_game(source, cache, project=ROOT):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      epilog='Your game copy is required and is never modified. Output: out/NFSV.app')
-    parser.add_argument('game_copy', type=Path, help='folder containing GameData/FEData/Porsche.exe, or .iso/.bin/.cue')
+    parser.add_argument('game_copy', type=Path, nargs='?', help='folder containing GameData/FEData/Porsche.exe, or .iso/.bin/.cue')
+    parser.add_argument('--progress', action='store_true', help='print NFSV-EVENT JSON progress lines')
+    parser.add_argument('--setup-only', action='store_true', help='only check the Mac and set up Python dependencies')
     args = parser.parse_args()
+    global PROGRESS
+    PROGRESS = args.progress
+    if args.setup_only:
+        check_platform()
+        dependencies()
+        return
+    if args.game_copy is None:
+        parser.error('the game_copy argument is required')
     source = args.game_copy.expanduser().resolve()
     if not source.exists():
         raise ValueError('game copy does not exist')
     preflight()
     dependencies()
-    cache = Path(os.environ.get('NFSV_CACHE_DIR', str(Path.home() / 'Library/Caches/NFSV')))
+    cache = cache_directory()
     game = prepared_game(source, cache)
     os.chdir(ROOT)
-    step('Translating the verified game and patch code to C')
+    step('Translating the verified game and patch code to C', 'translate')
     subprocess.run([sys.executable, 'tools/prepare.py', str(game / 'Porsche.exe')], check=True)
-    step('Compiling native ARM64 code')
+    step('Compiling native ARM64 code', 'compile')
     subprocess.run([sys.executable, 'tools/compile.py'], check=True)
-    step('Packaging and signing the macOS app with your private game files')
+    step('Packaging and signing the macOS app with your private game files', 'package')
     subprocess.run([sys.executable, 'tools/package.py', '--game-folder', str(game)], check=True)
     print('\nReady: out/NFSV.app\nOpen it in Finder to play. Your original game copy and existing saves were not changed.', flush=True)
+    if PROGRESS:
+        emit({'done': str(ROOT / 'out/NFSV.app')})
 
 
 if __name__ == '__main__':
@@ -147,4 +176,6 @@ if __name__ == '__main__':
         main()
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         print(f'Build failed: {error}', file=sys.stderr)
+        if PROGRESS:
+            emit({'error': str(error)})
         sys.exit(1)

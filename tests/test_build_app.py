@@ -1,4 +1,8 @@
+import contextlib
+import io
+import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -52,6 +56,29 @@ class BuildAppTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'checksum'):
                 build_app.prepared_game(fixture.game, fixture.root / 'cache', fixture.root / 'project')
             download.assert_not_called()
+
+    def test_progress_mode_emits_events_and_error(self):
+        run = subprocess.run([sys.executable, str(ROOT / 'tools/build_app.py'), '--progress', '/nonexistent/game'],
+                             text=True, capture_output=True)
+        self.assertEqual(run.returncode, 1)
+        events = [json.loads(l[len('NFSV-EVENT '):]) for l in run.stdout.splitlines() if l.startswith('NFSV-EVENT ')]
+        self.assertEqual(events[-1], {'error': 'game copy does not exist'})
+
+    def test_step_emits_event_only_in_progress_mode(self):
+        for progress in (False, True):
+            self.addCleanup(setattr, build_app, 'PROGRESS', build_app.PROGRESS)
+            build_app.PROGRESS = progress
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                build_app.step('Hello', 'verify')
+            self.assertEqual('NFSV-EVENT {"step": "verify", "title": "Hello"}' in out.getvalue(), progress)
+            self.assertIn('\nHello\n', out.getvalue())
+
+    def test_setup_only_needs_no_game(self):
+        run = subprocess.run([sys.executable, str(ROOT / 'tools/build_app.py'), '--setup-only', '--help'],
+                             text=True, capture_output=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn('--setup-only', run.stdout)
 
     def test_unsupported_file_type_has_actionable_error(self):
         with tempfile.TemporaryDirectory() as tmp:

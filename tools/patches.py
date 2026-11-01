@@ -19,7 +19,7 @@ import pefile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.disc import Disc
-from tools.game_source import copy_game, verify_game
+from tools.game_source import copy_game, leave_out, verify_game
 
 COMBINED_SHA = 'bb69d935b49dfe7ab71e22608102d01b985a4ca41c9e8559e765ed2d0149d5a2'
 COMBINED_MIRROR_SHA = 'cc3087b5f8914dd47ab4e2b54da2e68c4caa03ab4871c11183a4720eba193d66'
@@ -278,6 +278,8 @@ def prepare_game(disc, combined, silent, destination):
             with Disc(disc) as source:
                 source_files = len(source.extract(destination))
         try:
+            if not Path(disc).is_dir():
+                leave_out(destination)
             applied = []
             for entry, relative in installed_entries(patch):
                 target = overlay_path(destination, relative)

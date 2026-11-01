@@ -14,7 +14,8 @@ import pefile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools.bundled_game import clone_tree  # noqa: E402
+from tools.bundled_game import ICON_FILES  # noqa: E402
+from tools.game_source import clone_tree, finder_junk, leave_out  # noqa: E402
 
 
 def windows_icon(executable):
@@ -60,16 +61,20 @@ def write_app_icon(icon, destination):
 
 
 def copy_game_files(source, destination):
+    """The whole prepared game goes into the app, the Windows-only extras of the player's copy
+    included. Only the original icon the Builder left beside it for packaging (it becomes
+    NFSV.icns) and what leave_out() removes (Finder files, links, macOS code) stay out."""
     source, destination = Path(source), Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
-    for name in ('GameData', 'FEData', 'SaveData', 'Drivers', 'PatchNotices'):
-        path = source / name
-        if path.is_dir():
-            clone_tree(path, destination / name)
-    for name in ('Porsche.exe', 'fe.txt', 'install.txt', 'version.txt', 'patch-manifest.json', 'build-input.json'):
-        path = source / name
-        if path.is_file():
-            shutil.copyfile(path, destination / name)
+    for path in sorted(source.iterdir()):
+        if path.name in ICON_FILES or finder_junk(path.name):
+            continue
+        clone_tree(path, destination / path.name)
+    leave_out(destination)  # already done when the game was prepared
+    # codesign --strict refuses Finder info and resource forks inside a bundle. The other
+    # attributes stay, so a download's quarantine stays on the files copied from it.
+    for name in ('com.apple.FinderInfo', 'com.apple.ResourceFork'):
+        subprocess.run(['/usr/bin/xattr', '-dr', name, str(destination)], capture_output=True)
 
 
 def package(game, builder_version=''):

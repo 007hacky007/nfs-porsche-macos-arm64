@@ -1,6 +1,8 @@
 """Validate user-owned game files without storing any game bytes in source control."""
 import hashlib
+import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import NamedTuple
 
@@ -39,6 +41,7 @@ class GameSource(NamedTuple):
     version: str
     assets_sha256: str
     exe_sha256: str
+    root: Path = None
 
 
 def file_sha256(path):
@@ -108,20 +111,102 @@ def verify_game(root):
     if exe not in SUPPORTED_EXES:
         raise UnsupportedGame('Porsche.exe is not a supported USA v3.2, v3.4 or v3.5 executable.',
                               f'Detected Porsche.exe SHA-256: {exe}')
-    return GameSource(files, SUPPORTED_DATA[assets], assets, exe)
+    return GameSource(files, SUPPORTED_DATA[assets], assets, exe, Path(root))
+
+
+def clone_tree(source, destination):
+    """Copy a file or folder, as APFS clones where the volume supports them (cp falls back to
+    copying). Extended attributes come along, so a download's quarantine stays."""
+    try:
+        subprocess.run(['/bin/cp', '-cR', str(source), str(destination)], check=True, capture_output=True)
+    except (OSError, subprocess.CalledProcessError):
+        if Path(destination).is_dir() and not Path(destination).is_symlink():
+            shutil.rmtree(destination)
+        elif Path(destination).exists() or Path(destination).is_symlink():
+            Path(destination).unlink()
+        if Path(source).is_dir() and not Path(source).is_symlink():
+            shutil.copytree(source, destination, symlinks=True)
+        else:
+            shutil.copy2(source, destination, follow_symlinks=False)
+
+
+def finder_junk(name):
+    return name == '.DS_Store' or name.startswith('._')
+
+
+MACOS_BUNDLES = ('.app', '.framework', '.bundle', '.plugin', '.kext', '.pkg', '.mpkg', '.workflow')
+MACOS_FILES = ('.command', '.tool', '.sh', '.dylib', '.so', '.scpt')
+MACH_O = {bytes.fromhex(magic) for magic in ('feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca')}
+
+
+def leave_out(root):
+    """Removes from `root` (a game copied from the player's copy) what never goes into NFSV.app:
+    Finder's .DS_Store and ._ files, symbolic links (codesign refuses links that leave the app)
+    and macOS code. The game is Windows files only, and a Mac program hidden in a downloaded copy
+    must not end up inside a signed app. Windows files stay. Returns the removed paths."""
+    removed = []
+
+    def remove(path, why):
+        print(f'left out of the app ({why}): {path.relative_to(root)}', flush=True)
+        removed.append(path.relative_to(root).as_posix())
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
+    for folder, directories, names in os.walk(root):
+        folder = Path(folder)
+        for name in sorted(directories):
+            path = folder / name
+            if path.is_symlink():
+                remove(path, 'symbolic link')
+            elif finder_junk(name):
+                remove(path, 'Finder file')
+            elif name.casefold().endswith(MACOS_BUNDLES):
+                remove(path, 'macOS code')
+        directories[:] = [d for d in directories if (folder / d).is_dir()]
+        for name in sorted(names):
+            path = folder / name
+            if path.is_symlink():
+                remove(path, 'symbolic link')
+            elif finder_junk(name):
+                remove(path, 'Finder file')
+            elif name.casefold().endswith(MACOS_FILES):
+                remove(path, 'macOS code')
+            elif path.is_file():
+                with path.open('rb') as f:
+                    if f.read(4) in MACH_O:
+                        remove(path, 'macOS code')
+    return removed
 
 
 def copy_game(source, destination):
+    """Copy the whole game copy `source` (from verify_game) to `destination`: the game files
+    under their usual names and everything else beside them (Windows-only extras such as the
+    installer, DirectX and drivers), less what leave_out() removes."""
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
     try:
-        for relative, original in source.files.items():
-            target = destination / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(original, target)
+        canonical = {name.casefold(): name for name in ('GameData', 'FEData', 'fe.txt', 'install.txt', 'Porsche.exe')}
+        for item in sorted(Path(source.root).iterdir()):
+            if not finder_junk(item.name):
+                clone_tree(item, destination / canonical.get(item.name.casefold(), item.name))
+        leave_out(destination)
         copied = verify_game(destination)
         if copied.assets_sha256 != source.assets_sha256 or copied.exe_sha256 != source.exe_sha256:
             raise ValueError('game checksum changed while copying')
     except BaseException:
         shutil.rmtree(destination)
         raise
+
+
+def tree_digest(root, skip=()):
+    """Fingerprint of every file in `root`, names and contents, less the top-level names in `skip`."""
+    digest = hashlib.sha256()
+    root = Path(root)
+    for path in sorted(root.rglob('*'), key=lambda p: p.relative_to(root).as_posix()):
+        relative = path.relative_to(root).as_posix()
+        if relative in skip or not path.is_file() or path.is_symlink():
+            continue
+        digest.update(relative.encode('utf-8') + b'\0' + bytes.fromhex(file_sha256(path)))
+    return digest.hexdigest()

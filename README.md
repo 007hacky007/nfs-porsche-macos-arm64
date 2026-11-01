@@ -82,7 +82,7 @@ Click **Play** to save your choices and start the game, or **Quit** to leave wit
 
 Saves and the game log live in `~/Library/Application Support/NFSV`. Rebuilding or replacing the app does not touch them, so existing careers keep their progress. Quit the game before rebuilding.
 
-NFSV.app carries all of its game files inside, so it never asks for a game folder and keeps working after you move it to another folder. Your original game copy is only needed to build the app again. Nothing inside the app is changed while you play. If NFSV.app says it is incomplete, build it again with NFSV Builder.
+NFSV.app carries the complete game inside, so it never asks for a game folder and keeps working after you move it to another folder. Everything in your game copy goes in, including the Windows-only extras such as the installer, DirectX and drivers, with the patched files on top. Only Finder's `.DS_Store` files, symbolic links and macOS programs stay out: the game is Windows files only, so a Mac program hidden in a downloaded copy never ends up inside the signed app, and the build log names each one it leaves out. The files copied from your copy keep their download quarantine; only what the build makes loses it. Your original game copy is only needed to build the app again. Nothing inside the app is changed while you play. If NFSV.app says it is incomplete, build it again with NFSV Builder.
 
 ### Updating
 
@@ -90,7 +90,7 @@ New features come with a new NFSV Builder release. When one is out, the launcher
 
 Open the new NFSV Builder. It finds your NFSV.app in the destination folder (or in Applications) and uses the game files inside it, so you do not need your original game copy again. The game row says so, and the button reads **Update NFSV.app** with the old and new version. Your current app is only read and stays in place until the new one is completely built; quit the game before updating. Saves and settings are kept.
 
-The Builder reuses the game inside the app only when it is exactly what this Builder version would prepare: the same supported game release, the same patches and the same prepared files, checked by their checksums. If the app was changed, is incomplete, or a newer Builder prepares the game differently, the row says why and asks for your original game copy. Apps built from Terminal do not check for updates; build them again to update.
+The Builder reuses the game inside the app only when it is exactly what this Builder version would prepare: the same supported game release, the same patches and the same prepared files, every one of them present and checked by its checksum. Apps from earlier Builders, which left the extras of the game copy out, are not reused; choose your original game copy once to build the complete app. If the app was changed, is incomplete, or a newer Builder prepares the game differently, the row says why and asks for your original game copy. Apps built from Terminal do not check for updates; build them again to update.
 
 ### Game controllers
 
@@ -169,7 +169,7 @@ For BIN/CUE, keep the BIN beside the CUE with the filename recorded in it. Use t
 
 The script sets up `.venv`, extracts images, verifies all game-data and executable checksums, downloads and verifies patches, translates the supported code, compiles it and signs the app locally. Your input copy and existing saves are never modified. Later builds reuse verified downloads and prepared files.
 
-When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications or any other folder; it contains all of the prepared game files and never asks for a game folder. The launcher only accepts the game files inside its own `Contents/Resources/Game` and refuses to start if they are missing or do not match the build. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
+When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications or any other folder; it contains the complete prepared game and never asks for a game folder. The launcher only accepts the game files inside its own `Contents/Resources/Game` and refuses to start if they are missing or do not match the build. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
 
 To build again without the original copy, pass an existing app instead: `./build.sh /Applications/NFSV.app`. Its game is reused under the same checks as in [Updating](#updating), the app itself is only read, and the result is again `out/NFSV.app`.
 

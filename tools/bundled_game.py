@@ -5,27 +5,31 @@ linked Porsche.exe), not the original copy, so the usual game-copy check cannot 
 reused only when this Builder would prepare exactly the same files: the recorded original copy and
 patch archives are ones this Builder accepts, preparation has not changed since (PREPARE_REVISION),
 the linked executable is the one this Builder translates, every file the patch installs is
-byte-identical to the pinned archive and the whole data tree still matches its recorded checksum.
-Otherwise the original game copy is needed again.
+byte-identical to the pinned archive and every file of the prepared game, none missing, still
+matches its recorded checksum. Otherwise the original game copy is needed again.
 """
 import json
 import plistlib
 import shutil
-import subprocess
 from pathlib import Path
 from typing import NamedTuple
 
-from tools.game_source import SUPPORTED_DATA, SUPPORTED_EXES, assets_digest, file_sha256, game_files
+from tools.game_source import (SUPPORTED_DATA, SUPPORTED_EXES, assets_digest, clone_tree, file_sha256,
+                               game_files, tree_digest)
 from tools.inspect_pe import SUPPORTED as SUPPORTED_IMAGES
 from tools.patches import COMBINED_MIRROR_SHA, COMBINED_SHA, SILENT_SHA, installed_entries, overlay_path
 
 # Bump whenever tools/patches.py prepare_game() would produce different files, so apps prepared by
 # an older Builder are no longer reused. build-input.json files without the field were written
-# by revision 1: preparation has not changed since build-input.json was introduced.
-PREPARE_REVISION = 1
+# by revision 1. Revision 2 copies the whole game copy, its Windows-only extras included, and
+# records prepared_files_sha256.
+PREPARE_REVISION = 2
 LINKED_EXE_SHA = next(sha for sha, name in SUPPORTED_IMAGES.items() if 'native-linked' in name)
-# Patch files that apps built before they were bundled lack; restored from the verified archive.
-RESTORABLE = ('Drivers',)
+# The original icon the Builder writes beside a prepared game for packaging (it becomes NFSV.icns,
+# so it is not copied into the game folder) and the record itself: the only names
+# prepared_files_sha256 leaves out.
+ICON_FILES = ('OriginalGame.ico', 'OriginalGame.icns')
+BUILD_FILES = ('build-input.json', *ICON_FILES)
 CHOOSE_ORIGINAL = 'Choose your original game folder, .iso, .bin or .cue instead.'
 
 
@@ -86,39 +90,25 @@ def verify_bundled_game(app, linked_sha=None):
         raise not_reusable(app, 'its Porsche.exe was changed.')
     if assets_digest(files) != info.get('prepared_assets_sha256'):
         raise not_reusable(app, 'its game files were changed.')
+    if prepared_files_digest(folder) != info.get('prepared_files_sha256'):
+        raise not_reusable(app, 'its game files are incomplete or were changed.')
     return BundledGame(folder, SUPPORTED_DATA[info['source_assets_sha256']], info, builder_version(app))
 
 
-def clone_tree(source, destination):
-    """Copy a folder, as APFS clones where the volume supports them (cp falls back to copying)."""
-    try:
-        subprocess.run(['/bin/cp', '-cR', str(source), str(destination)], check=True, capture_output=True)
-    except (OSError, subprocess.CalledProcessError):
-        if Path(destination).exists():
-            shutil.rmtree(destination)
-        shutil.copytree(source, destination)
+def prepared_files_digest(folder):
+    """Every file of a prepared game, none left out, except BUILD_FILES."""
+    return tree_digest(folder, BUILD_FILES)
 
 
 def check_patch_files(folder, patch, app='NFSV.app'):
-    """Compare every file the patch installs with the verified archive `patch` (a ZipFile).
-
-    Missing files under RESTORABLE are written from the archive; any other difference rejects
-    the folder. Returns the restored paths.
-    """
-    restored = []
+    """Compare every file the patch installs with the verified archive `patch` (a ZipFile); a
+    missing or different file rejects the folder."""
     for entry, relative in installed_entries(patch):
         target = overlay_path(folder, relative)
-        data = patch.read(entry)
-        if target.is_file():
-            if target.read_bytes() != data:
-                raise not_reusable(app, f'its {relative} differs from the patch.')
-        elif relative.parts[0] in RESTORABLE and not target.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-            restored.append(str(relative))
-        else:
+        if not target.is_file():
             raise not_reusable(app, f'it is missing {relative}.')
-    return restored
+        if target.read_bytes() != patch.read(entry):
+            raise not_reusable(app, f'its {relative} differs from the patch.')
 
 
 def reuse_bundled_game(app, bundled, patch, destination):
@@ -131,7 +121,8 @@ def reuse_bundled_game(app, bundled, patch, destination):
         check_patch_files(destination, patch, app)
         files = game_files(destination)
         if (file_sha256(files[Path('Porsche.exe')]) != bundled.info['linked_exe_sha256']
-                or assets_digest(files) != bundled.info['prepared_assets_sha256']):
+                or assets_digest(files) != bundled.info['prepared_assets_sha256']
+                or prepared_files_digest(destination) != bundled.info['prepared_files_sha256']):
             raise ValueError('game checksum changed while copying')
         icon = Path(app) / 'Contents/Resources/NFSV.icns'
         if icon.is_file():

@@ -26,20 +26,20 @@ def patch_archive():
     return ZipFile(io.BytesIO(data.getvalue()))
 
 
-def make_app(root, drivers=True, **overrides):
+def make_app(root, files=None, **overrides):
     app = Path(root) / 'NFSV.app'
     game = app / 'Contents/Resources/Game'
     for name, content in {'GameData/car.viv': b'car', 'FEData/menu.fsh': b'menu', 'fe.txt': b'fe',
                           'install.txt': b'install', 'Porsche.exe': LINKED, 'SaveData/profile': b'save',
-                          'version.txt': b'3.5', **PATCH_FILES}.items():
-        if name.startswith('Drivers') and not drivers:
-            continue
+                          'version.txt': b'3.5', 'DirectX/dxsetup.exe': b'windows extra',
+                          'PatchNotices/Readme.txt': b'notice', **PATCH_FILES, **(files or {})}.items():
         path = game / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
-    info = {'prepare_revision': 1, 'source_version': 'USA v3.2',
+    info = {'prepare_revision': bundled_game.PREPARE_REVISION, 'source_version': 'USA v3.2',
             'source_assets_sha256': DATA_VERSIONS[0]['sha256'], 'source_exe_sha256': EXECUTABLES[0]['sha256'],
             'linked_exe_sha256': LINKED_SHA, 'prepared_assets_sha256': assets_digest(game_files(game)),
+            'prepared_files_sha256': bundled_game.prepared_files_digest(game),
             'combined_sha256': COMBINED_MIRROR_SHA, 'silent_sha256': SILENT_SHA, **overrides}
     (game / 'build-input.json').write_text(json.dumps({k: v for k, v in info.items() if v is not None}))
     (app / 'Contents/Resources/NFSV.icns').write_bytes(b'icon')
@@ -67,11 +67,16 @@ class BundledGameTests(unittest.TestCase):
         game = bundled_game.verify_bundled_game(app, LINKED_SHA)
         self.assertEqual((game.version, game.builder_version), ('USA v3.2', '1.2.0'))
 
-    def test_apps_from_before_the_revision_field_are_revision_one(self):
-        bundled_game.verify_bundled_game(make_app(self.root, prepare_revision=None), LINKED_SHA)
+    def test_apps_from_builders_that_left_files_out_are_not_reused(self):
+        """Revision 1 (also apps without the field) left the extras of the copy out of the app."""
+        for index, revision in enumerate((None, 1)):
+            with self.subTest(revision=revision):
+                app = make_app(self.root / str(index), prepare_revision=revision, prepared_files_sha256=None)
+                with self.assertRaisesRegex(ValueError, 'prepares the game differently'):
+                    bundled_game.verify_bundled_game(app, LINKED_SHA)
 
     def test_rejects_what_this_builder_would_not_produce(self):
-        cases = {'prepares the game differently': {'prepare_revision': 2},
+        cases = {'prepares the game differently': {'prepare_revision': bundled_game.PREPARE_REVISION + 1},
                  'does not accept': {'source_assets_sha256': '0' * 64},
                  'different patches': {'combined_sha256': '1' * 64},
                  'not the one this Builder translates': {'linked_exe_sha256': '2' * 64}}
@@ -82,6 +87,16 @@ class BundledGameTests(unittest.TestCase):
                     bundled_game.verify_bundled_game(make_app(folder, **override), LINKED_SHA)
 
     def test_rejects_changed_or_missing_game_files(self):
+        """No file of the prepared game is ignored: the extras and patch notices count too."""
+        for index, name in enumerate(('DirectX/dxsetup.exe', 'PatchNotices/Readme.txt', 'Drivers/dx7/thrash.ini')):
+            with self.subTest(name):
+                app = make_app(self.root / str(index))
+                (app / 'Contents/Resources/Game' / name).unlink()
+                with self.assertRaisesRegex(ValueError, 'incomplete or were changed'):
+                    bundled_game.verify_bundled_game(app, LINKED_SHA)
+                (app / 'Contents/Resources/Game' / name).write_bytes(b'changed')
+                with self.assertRaisesRegex(ValueError, 'incomplete or were changed'):
+                    bundled_game.verify_bundled_game(app, LINKED_SHA)
         app = make_app(self.root)
         (app / 'Contents/Resources/Game/GameData/car.viv').write_bytes(b'modded')
         with self.assertRaisesRegex(ValueError, 'were changed'):
@@ -100,22 +115,22 @@ class BundledGameTests(unittest.TestCase):
             bundled_game.verify_bundled_game(app, LINKED_SHA)
         self.assertEqual(bundled_game.builder_version(app), '')
 
-    def test_reuse_reads_the_app_only_and_restores_drivers_from_the_patch(self):
-        app = make_app(self.root, drivers=False)
+    def test_reuse_reads_the_app_only_and_keeps_every_file(self):
+        app = make_app(self.root)
         before = snapshot(app)
         game = bundled_game.verify_bundled_game(app, LINKED_SHA)
         target = self.root / 'prepared'
         bundled_game.reuse_bundled_game(app, game, patch_archive(), target)
         self.assertEqual(snapshot(app), before)
-        self.assertEqual((target / 'Drivers/dx7/thrash.ini').read_bytes(), PATCH_FILES['Drivers/dx7/thrash.ini'])
+        game_files_of = lambda root: {k for k in snapshot(root) if k not in bundled_game.BUILD_FILES}
+        self.assertEqual(game_files_of(target), game_files_of(app / 'Contents/Resources/Game'))
         self.assertEqual((target / 'OriginalGame.icns').read_bytes(), b'icon')
         self.assertEqual((target / 'Porsche.exe').read_bytes(), LINKED)
-        self.assertEqual((target / 'SaveData/profile').read_bytes(), b'save')
+        self.assertEqual((target / 'DirectX/dxsetup.exe').read_bytes(), b'windows extra')
 
     def test_reuse_rejects_files_that_differ_from_the_patch(self):
-        app = make_app(self.root)
-        (app / 'Contents/Resources/Game/Drivers/dx7/thrash.ini').write_bytes(b'changed')
-        game = bundled_game.verify_bundled_game(app, LINKED_SHA)  # not covered by the data checksum
+        app = make_app(self.root, files={'Drivers/dx7/thrash.ini': b'changed'})
+        game = bundled_game.verify_bundled_game(app, LINKED_SHA)  # recorded as prepared
         target = self.root / 'prepared'
         with self.assertRaisesRegex(ValueError, 'thrash.ini differs from the patch'):
             bundled_game.reuse_bundled_game(app, game, patch_archive(), target)

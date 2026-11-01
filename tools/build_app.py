@@ -90,7 +90,18 @@ def source_directory(source, temporary_parent):
         yield destination
 
 
+def prepared_key(source_assets_sha256, source_exe_sha256, combined_sha256):
+    """The local/builds entry for a game copy, patches and PREPARE_REVISION; an app's game and
+    the original copy it was prepared from share it."""
+    from tools.bundled_game import PREPARE_REVISION
+    from tools.downloads import SILENT_SHA
+
+    key = f'{source_assets_sha256}{source_exe_sha256}{combined_sha256}{SILENT_SHA}:{PREPARE_REVISION}'
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
 def check_prepared(destination):
+    from tools.bundled_game import PREPARE_REVISION, prepared_files_digest
     from tools.inspect_pe import inspect_pe, require_supported
 
     marker = destination / 'build-input.json'
@@ -99,13 +110,14 @@ def check_prepared(destination):
     saved = json.loads(marker.read_text())
     actual = assets_digest(game_files(destination))
     image = require_supported(inspect_pe(destination / 'Porsche.exe'))
-    if saved.get('prepared_assets_sha256') != actual or 'native-linked' not in image:
+    if (saved.get('prepare_revision', 1) != PREPARE_REVISION or saved.get('prepared_assets_sha256') != actual
+            or saved.get('prepared_files_sha256') != prepared_files_digest(destination) or 'native-linked' not in image):
         raise ValueError('prepared game cache checksum changed; remove that local/builds entry and retry')
 
 
 def prepared_from_app(app, cache, local):
     """Reuse the prepared game inside an existing NFSV.app, which is only read (tools/bundled_game.py)."""
-    from tools.downloads import SILENT_SHA, fetch_patches
+    from tools.downloads import fetch_patches
     from tools.bundled_game import reuse_bundled_game, verify_bundled_game
     from tools.patches import COMBINED_MIRROR_SHA, COMBINED_SHA, verified_archive
 
@@ -116,9 +128,7 @@ def prepared_from_app(app, cache, local):
     combined, _ = fetch_patches(cache / 'patches')
     info = bundled.info
     # The same entry a build from the original copy uses, so either source shares it.
-    key = hashlib.sha256((info['source_assets_sha256'] + info['source_exe_sha256']
-                          + info['combined_sha256'] + SILENT_SHA).encode()).hexdigest()
-    destination = local / key
+    destination = local / prepared_key(info['source_assets_sha256'], info['source_exe_sha256'], info['combined_sha256'])
     if destination.exists():
         check_prepared(destination)
         print('Reusing verified prepared game files.', flush=True)
@@ -133,9 +143,9 @@ def prepared_from_app(app, cache, local):
 
 
 def prepared_game(source, cache, project=ROOT):
-    from tools.downloads import SILENT_SHA, fetch_patches
+    from tools.downloads import fetch_patches
     from tools.inspect_pe import inspect_pe, require_supported
-    from tools.bundled_game import PREPARE_REVISION, is_app
+    from tools.bundled_game import PREPARE_REVISION, is_app, prepared_files_digest
     from tools.package import windows_icon
     from tools.patches import prepare_game
 
@@ -154,9 +164,7 @@ def prepared_game(source, cache, project=ROOT):
         step('Fetching verified patches (or checking their download cache)', 'patches')
         combined, silent = fetch_patches(cache / 'patches')
         combined_sha = file_sha256(combined)  # the mirror or the original release archive
-        key = hashlib.sha256((original.assets_sha256 + original.exe_sha256 + combined_sha + SILENT_SHA).encode()).hexdigest()
-        destination = local / key
-        marker = destination / 'build-input.json'
+        destination = local / prepared_key(original.assets_sha256, original.exe_sha256, combined_sha)
         if destination.exists():
             check_prepared(destination)
             (destination / 'OriginalGame.ico').write_bytes(icon)
@@ -172,6 +180,7 @@ def prepared_game(source, cache, project=ROOT):
             info = {'prepare_revision': PREPARE_REVISION, 'source_version': original.version, 'source_assets_sha256': original.assets_sha256,
                     'source_exe_sha256': original.exe_sha256, 'linked_exe_sha256': report['sha256'],
                     'prepared_assets_sha256': assets_digest(game_files(working)),
+                    'prepared_files_sha256': prepared_files_digest(working),
                     'combined_sha256': report['combined_sha256'], 'silent_sha256': report['silent_sha256']}
             (working / 'build-input.json').write_text(json.dumps(info, indent=2) + '\n')
             (working / 'OriginalGame.ico').write_bytes(icon)

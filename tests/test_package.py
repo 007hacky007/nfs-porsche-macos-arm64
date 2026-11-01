@@ -1,30 +1,85 @@
+import os
+import plistlib
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from tools import package
+from tools import game_source, package
+
+
+def tree(root):
+    return sorted(p.relative_to(root).as_posix() for p in Path(root).rglob('*') if p.is_file() or p.is_symlink())
+
+
+def quarantine(path):
+    r = subprocess.run(['/usr/bin/xattr', '-p', 'com.apple.quarantine', str(path)], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
 
 
 class PackageTests(unittest.TestCase):
-    def test_bundles_only_prepared_game_files(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = root / 'prepared'
-            for name in ('GameData/car.bin', 'FEData/movie.bin', 'Porsche.exe', 'fe.txt', 'install.txt',
-                         'version.txt', 'patch-manifest.json', 'build-input.json', 'PatchNotices/readme.txt',
-                         'Drivers/dx7/thrash.ini'):
-                p = source / name
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_bytes(b'fixture')
-            (source / 'private.log').write_bytes(b'private')
-            (source / 'OriginalGame.ico').write_bytes(b'build-time icon')
-            (source / 'PatchSources').mkdir()
-            (source / 'PatchSources/archive.zip').write_bytes(b'not part of the app')
-            target = root / 'bundle/Game'
-            package.copy_game_files(source, target)
-            self.assertTrue((target / 'GameData/car.bin').is_file())
-            self.assertTrue((target / 'Porsche.exe').is_file())
-            self.assertTrue((target / 'Drivers/dx7/thrash.ini').is_file())
-            self.assertFalse((target / 'private.log').exists())
-            self.assertFalse((target / 'OriginalGame.ico').exists())
-            self.assertFalse((target / 'PatchSources').exists())
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_bundles_the_whole_prepared_game(self):
+        source = self.root / 'prepared'
+        names = ('GameData/car.bin', 'FEData/movie.bin', 'Porsche.exe', 'fe.txt', 'install.txt', 'version.txt',
+                 'patch-manifest.json', 'build-input.json', 'PatchNotices/readme.txt', 'drivers/dx7/thrash.ini',
+                 'SaveData/profile', 'DirectX/DXSETUP.EXE', 'setup/data1.cab', 'AutoRun.inf', 'gimme.dll',
+                 'Thumbs.db')
+        for name in names + ('OriginalGame.ico', 'OriginalGame.icns', '.DS_Store', 'GameData/.DS_Store'):
+            p = source / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b'fixture')
+        target = self.root / 'bundle/Game'
+        package.copy_game_files(source, target)
+        self.assertEqual(tree(target), sorted(names))
+
+    def test_no_macos_code_from_the_copy_and_its_quarantine_stays(self):
+        """A downloaded copy may hide a Mac program: it never goes into the app, and the files
+        copied from the copy keep the download's quarantine (only what the build made loses it)."""
+        from test_game_source import GameSourceTests
+        fixture = GameSourceTests(methodName='test_refuses_existing_destination')
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.allow_fixture()
+        copy = fixture.game
+        (copy / 'DirectX').mkdir()
+        (copy / 'DirectX/DXSETUP.EXE').write_bytes(b'MZ windows extra')
+        shutil.copy('/usr/bin/true', copy / 'readme.txt')                      # a Mach-O under another name
+        (copy / 'Tool.app/Contents/MacOS').mkdir(parents=True)
+        shutil.copy('/usr/bin/true', copy / 'Tool.app/Contents/MacOS/Tool')
+        (copy / 'setup').mkdir()
+        (copy / 'setup/run.command').write_text('#!/bin/sh\n')
+        (copy / 'setup/data1.cab').write_bytes(b'cab')
+        (copy / 'link').symlink_to('/usr/bin')
+        (copy / '.DS_Store').write_bytes(b'finder')
+        mark = '0081;00000000;Test;'
+        subprocess.run(['/usr/bin/xattr', '-w', 'com.apple.quarantine', mark, str(copy / 'DirectX/DXSETUP.EXE')], check=True)
+        subprocess.run(['/usr/bin/xattr', '-wx', 'com.apple.FinderInfo', '00' * 31 + '01', str(copy / 'install.txt')],
+                       check=True)
+        prepared = self.root / 'prepared'
+        game_source.copy_game(game_source.verify_game(copy), prepared)
+        expected = ['DirectX/DXSETUP.EXE', 'FEData/movie.bin', 'GameData/track.bin', 'Porsche.exe', 'fe.txt',
+                    'install.txt', 'setup/data1.cab']
+        self.assertEqual(tree(prepared), expected)
+
+        app = self.root / 'NFSV.app'
+        (app / 'Contents/MacOS').mkdir(parents=True)
+        shutil.copy('/usr/bin/true', app / 'Contents/MacOS/NFSV')
+        with (app / 'Contents/Info.plist').open('wb') as f:
+            plistlib.dump({'CFBundleIdentifier': 'org.nfsv.test', 'CFBundleExecutable': 'NFSV'}, f)
+        game = app / 'Contents/Resources/Game'
+        package.copy_game_files(prepared, game)
+        self.assertEqual(tree(game), expected)
+        self.assertEqual(quarantine(game / 'DirectX/DXSETUP.EXE'), mark, 'game data keeps its quarantine')
+        subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(app)], check=True, capture_output=True)
+        subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(app)], check=True,
+                       capture_output=True)
+
+
+if __name__ == '__main__':
+    unittest.main()

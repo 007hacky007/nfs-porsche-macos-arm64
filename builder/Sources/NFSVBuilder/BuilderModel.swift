@@ -27,6 +27,10 @@ final class BuilderModel: ObservableObject {
     @Published private(set) var gameRejected = false
     /// The rejection message plus what the check logged (detected checksums), for Copy details.
     @Published private(set) var gameDetails: String?
+    /// True while the game source is the installed NFSV.app found on start, not one the user chose.
+    @Published private(set) var usingInstalledApp = false
+    /// Why the installed NFSV.app found on start could not be reused, shown on the empty game row.
+    private var gameNote: String?
     /// Whether the "Which copy works?" sheet is open. Quitting closes it first.
     @Published var showingSupported = false
     /// The accepted releases for the "Which copy works?" sheet, loaded once from the pipeline.
@@ -74,7 +78,12 @@ final class BuilderModel: ObservableObject {
     var toolsReady: Bool { states[.buildTools]?.isReady == true }
     var buildEnabled: Bool { canBuild(states) }
 
+    var buildTitle: String {
+        buildButtonTitle(game: gamePath, oldStamp: gamePath.flatMap(builderStamp(ofApp:)), newVersion: version)
+    }
+
     func start() {
+        selectInstalledApp()
         refresh()
         prepare(sweep: true) { [self] _ in refreshBuildTools() }
     }
@@ -133,14 +142,25 @@ final class BuilderModel: ObservableObject {
         states[.destination] = destinationCheck(url)
     }
 
+    /// A game folder, disc image or NFSV.app (an app bundle is a folder).
     static func isGameCandidate(_ url: URL) -> Bool {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return false }
         return isDir.boolValue || ["iso", "bin", "cue"].contains(url.pathExtension.lowercased())
     }
 
+    /// An update reuses the game inside the installed app, so the original copy is not needed again.
+    private func selectInstalledApp() {
+        guard let app = findInstalledApp(destination: destination) else { return }
+        gamePath = app
+        usingInstalledApp = true
+        checkedGame = nil
+    }
+
     func setGame(_ url: URL) {
         guard phase == .checklist else { return }
+        usingInstalledApp = false
+        gameNote = nil
         gamePath = url
         defaults.set(url.path, forKey: "gamePath")
         checkedGame = nil
@@ -151,7 +171,7 @@ final class BuilderModel: ObservableObject {
         guard let game = gamePath else {
             gameRejected = false
             gameDetails = nil
-            states[.gameCopy] = .blocked("Choose a game folder, .iso, .bin or .cue")
+            states[.gameCopy] = .blocked(gameNote ?? "Choose a game folder, .iso, .bin, .cue or NFSV.app")
             return
         }
         guard toolsReady else {
@@ -185,7 +205,15 @@ final class BuilderModel: ObservableObject {
             guard gameRunner === runner else { return }
             gameRunner = nil
             if status == 0, let detected = detected {
-                states[.gameCopy] = .ready(detected)
+                states[.gameCopy] = .ready(isAppBundle(game)
+                    ? appGameMessage(version: detected, app: game, destination: destination) : detected)
+            } else if usingInstalledApp, let note = message {
+                // The installed app's game is missing or changed: back to the empty row, with the reason.
+                usingInstalledApp = false
+                gameNote = Self.plain(note)
+                gamePath = nil
+                checkedGame = nil
+                refreshGame()
             } else {
                 let text = Self.plain(message ?? "Could not check this game copy")
                 gameRejected = message != nil && FileManager.default.fileExists(atPath: game.path)

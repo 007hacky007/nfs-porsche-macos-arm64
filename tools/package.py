@@ -59,7 +59,7 @@ def write_app_icon(icon, destination):
 def copy_game_files(source, destination):
     source, destination = Path(source), Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
-    for name in ('GameData', 'FEData', 'SaveData', 'PatchNotices'):
+    for name in ('GameData', 'FEData', 'SaveData', 'Drivers', 'PatchNotices'):
         path = source / name
         if path.is_dir():
             shutil.copytree(path, destination / name)

@@ -11,7 +11,8 @@ class PackageTests(unittest.TestCase):
             root = Path(tmp)
             source = root / 'prepared'
             for name in ('GameData/car.bin', 'FEData/movie.bin', 'Porsche.exe', 'fe.txt', 'install.txt',
-                         'version.txt', 'patch-manifest.json', 'build-input.json', 'PatchNotices/readme.txt'):
+                         'version.txt', 'patch-manifest.json', 'build-input.json', 'PatchNotices/readme.txt',
+                         'Drivers/dx7/thrash.ini'):
                 p = source / name
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_bytes(b'fixture')
@@ -23,6 +24,7 @@ class PackageTests(unittest.TestCase):
             package.copy_game_files(source, target)
             self.assertTrue((target / 'GameData/car.bin').is_file())
             self.assertTrue((target / 'Porsche.exe').is_file())
+            self.assertTrue((target / 'Drivers/dx7/thrash.ini').is_file())
             self.assertFalse((target / 'private.log').exists())
             self.assertFalse((target / 'OriginalGame.ico').exists())
             self.assertFalse((target / 'PatchSources').exists())

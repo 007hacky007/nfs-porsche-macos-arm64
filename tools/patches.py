@@ -248,6 +248,21 @@ def overlay_path(root, relative):
     return target
 
 
+def installed_entries(patch):
+    """The Combined Patch archive members that preparation installs, with their game-relative paths."""
+    for entry in patch.infolist():
+        path = PurePosixPath(entry.filename)
+        if entry.is_dir() or not path.parts or path.parts[0] != 'Copy':
+            continue
+        parts = path.parts[1:]
+        if not parts or any(p in ('', '.', '..') or '\\' in p or ':' in p for p in parts):
+            raise ValueError('unsafe patch path')
+        # Native Metal and Cocoa replace the Windows wrappers/configurator.
+        if parts[0] not in ('FEData', 'GameData', 'SaveData') and str(path) not in ('Copy/version.txt', 'Copy/Drivers/dx7/thrash.ini'):
+            continue
+        yield entry, PurePosixPath(*parts)
+
+
 def prepare_game(disc, combined, silent, destination):
     destination = Path(destination)
     if destination.exists() or destination.is_symlink():
@@ -264,20 +279,11 @@ def prepare_game(disc, combined, silent, destination):
                 source_files = len(source.extract(destination))
         try:
             applied = []
-            for entry in patch.infolist():
-                path = PurePosixPath(entry.filename)
-                if entry.is_dir() or not path.parts or path.parts[0] != 'Copy':
-                    continue
-                parts = path.parts[1:]
-                if not parts or any(p in ('', '.', '..') or '\\' in p or ':' in p for p in parts):
-                    raise ValueError('unsafe patch path')
-                # Native Metal and Cocoa replace the Windows wrappers/configurator.
-                if parts[0] not in ('FEData', 'GameData', 'SaveData') and str(path) not in ('Copy/version.txt', 'Copy/Drivers/dx7/thrash.ini'):
-                    continue
-                target = overlay_path(destination, PurePosixPath(*parts))
+            for entry, relative in installed_entries(patch):
+                target = overlay_path(destination, relative)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(patch.read(entry))
-                applied.append(str(PurePosixPath(*parts)))
+                applied.append(str(relative))
             (destination / 'Porsche.exe').write_bytes(linked)
             # Reference originals and all upstream notices stay local beside the assets.
             # Upstream documentation stays beside the privately prepared files;

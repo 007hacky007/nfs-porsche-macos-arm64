@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from tools import downloads, game_source
+from tools import bundled_game, downloads, game_source
 from tools.build_app import cache_directory, emit, source_directory
 
 ARCHIVES = (('NFS5-Combined-Patch-v1.1.zip', ('COMBINED_SHA', 'COMBINED_ORIGINAL_SHA')),
@@ -26,6 +26,10 @@ def run(args):
         source = args.path.expanduser().resolve()
         if not source.exists():
             raise ValueError('game copy does not exist')
+        if bundled_game.is_app(source):
+            bundled = bundled_game.verify_bundled_game(source)
+            emit({'game': 'ok', 'version': bundled.version, 'app': True})
+            return
         with tempfile.TemporaryDirectory(prefix='nfsv-check-') as temporary, \
                 source_directory(source, temporary) as folder:
             emit({'game': 'ok', 'version': game_source.verify_game(folder).version})
@@ -43,7 +47,7 @@ def main(argv=None):
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))  # Cancel: unwind temporary folders
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
-    commands.add_parser('check-game', help='verify a game folder, .iso, .bin or .cue').add_argument('path', type=Path)
+    commands.add_parser('check-game', help='verify a game folder, .iso, .bin, .cue or the game inside an NFSV.app').add_argument('path', type=Path)
     commands.add_parser('patches', help='inspect or download the pinned patches').add_argument(
         'action', choices=('status', 'fetch'))
     commands.add_parser('supported', help='list the accepted game releases and their checksums')

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build NFSV.app from your own game folder, .iso, .bin or .cue disc image."""
+"""Build NFSV.app from your own game folder, .iso, .bin or .cue disc image, or update an existing NFSV.app."""
 import argparse
 from contextlib import contextmanager
 import hashlib
@@ -90,9 +90,52 @@ def source_directory(source, temporary_parent):
         yield destination
 
 
+def check_prepared(destination):
+    from tools.inspect_pe import inspect_pe, require_supported
+
+    marker = destination / 'build-input.json'
+    if not marker.is_file():
+        raise ValueError('prepared game cache is incomplete; remove that local/builds entry and retry')
+    saved = json.loads(marker.read_text())
+    actual = assets_digest(game_files(destination))
+    image = require_supported(inspect_pe(destination / 'Porsche.exe'))
+    if saved.get('prepared_assets_sha256') != actual or 'native-linked' not in image:
+        raise ValueError('prepared game cache checksum changed; remove that local/builds entry and retry')
+
+
+def prepared_from_app(app, cache, local):
+    """Reuse the prepared game inside an existing NFSV.app, which is only read (tools/bundled_game.py)."""
+    from tools.downloads import SILENT_SHA, fetch_patches
+    from tools.bundled_game import reuse_bundled_game, verify_bundled_game
+    from tools.patches import COMBINED_MIRROR_SHA, COMBINED_SHA, verified_archive
+
+    step(f'Checking the game files inside {app.name}', 'verify')
+    bundled = verify_bundled_game(app)
+    print(f'Accepted the {bundled.version} game prepared inside {app.name}', flush=True)
+    step('Fetching verified patches (or checking their download cache)', 'patches')
+    combined, _ = fetch_patches(cache / 'patches')
+    info = bundled.info
+    # The same entry a build from the original copy uses, so either source shares it.
+    key = hashlib.sha256((info['source_assets_sha256'] + info['source_exe_sha256']
+                          + info['combined_sha256'] + SILENT_SHA).encode()).hexdigest()
+    destination = local / key
+    if destination.exists():
+        check_prepared(destination)
+        print('Reusing verified prepared game files.', flush=True)
+        return destination
+    step(f'Reusing the prepared game files from {app.name}', 'prepare')
+    with tempfile.TemporaryDirectory(prefix='.prepare-', dir=local) as temporary, \
+            verified_archive(combined, (COMBINED_SHA, COMBINED_MIRROR_SHA)) as patch:
+        working = Path(temporary) / 'game'
+        reuse_bundled_game(app, bundled, patch, working)
+        working.rename(destination)
+    return destination
+
+
 def prepared_game(source, cache, project=ROOT):
     from tools.downloads import SILENT_SHA, fetch_patches
     from tools.inspect_pe import inspect_pe, require_supported
+    from tools.bundled_game import PREPARE_REVISION, is_app
     from tools.package import windows_icon
     from tools.patches import prepare_game
 
@@ -101,6 +144,8 @@ def prepared_game(source, cache, project=ROOT):
         raise ValueError('patch download cache must be outside the repository')
     local = project / 'local/builds'
     local.mkdir(parents=True, exist_ok=True)
+    if is_app(source):
+        return prepared_from_app(source, cache, local)
     with source_directory(source, local) as folder:
         step('Checking all game-data and source-executable checksums', 'verify')
         original = verify_game(folder)
@@ -113,13 +158,7 @@ def prepared_game(source, cache, project=ROOT):
         destination = local / key
         marker = destination / 'build-input.json'
         if destination.exists():
-            if not marker.is_file():
-                raise ValueError('prepared game cache is incomplete; remove that local/builds entry and retry')
-            saved = json.loads(marker.read_text())
-            actual = assets_digest(game_files(destination))
-            image = require_supported(inspect_pe(destination / 'Porsche.exe'))
-            if saved.get('prepared_assets_sha256') != actual or 'native-linked' not in image:
-                raise ValueError('prepared game cache checksum changed; remove that local/builds entry and retry')
+            check_prepared(destination)
             (destination / 'OriginalGame.ico').write_bytes(icon)
             print('Reusing verified prepared game files.', flush=True)
             return destination
@@ -130,7 +169,7 @@ def prepared_game(source, cache, project=ROOT):
             image = require_supported(inspect_pe(working / 'Porsche.exe'))
             if 'native-linked' not in image:
                 raise ValueError('patch preparation did not produce the supported linked executable')
-            info = {'source_version': original.version, 'source_assets_sha256': original.assets_sha256,
+            info = {'prepare_revision': PREPARE_REVISION, 'source_version': original.version, 'source_assets_sha256': original.assets_sha256,
                     'source_exe_sha256': original.exe_sha256, 'linked_exe_sha256': report['sha256'],
                     'prepared_assets_sha256': assets_digest(game_files(working)),
                     'combined_sha256': report['combined_sha256'], 'silent_sha256': report['silent_sha256']}
@@ -144,9 +183,11 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))  # Cancel: unwind temporary folders
     parser = argparse.ArgumentParser(description=__doc__,
                                      epilog='Your game copy is required and is never modified. Output: out/NFSV.app')
-    parser.add_argument('game_copy', type=Path, nargs='?', help='folder containing GameData/FEData/Porsche.exe, or .iso/.bin/.cue')
+    parser.add_argument('game_copy', type=Path, nargs='?',
+                        help='folder containing GameData/FEData/Porsche.exe, .iso/.bin/.cue, or an NFSV.app to update')
     parser.add_argument('--progress', action='store_true', help='print NFSV-EVENT JSON progress lines')
     parser.add_argument('--setup-only', action='store_true', help='only check the Mac and set up Python dependencies')
+    parser.add_argument('--builder-version', default='', help=argparse.SUPPRESS)
     args = parser.parse_args()
     global PROGRESS
     PROGRESS = args.progress
@@ -169,7 +210,8 @@ def main():
     step('Compiling native ARM64 code', 'compile')
     subprocess.run([sys.executable, 'tools/compile.py'], check=True)
     step('Packaging and signing the macOS app with your private game files', 'package')
-    subprocess.run([sys.executable, 'tools/package.py', '--game-folder', str(game)], check=True)
+    stamp = ['--builder-version', args.builder_version] if args.builder_version else []
+    subprocess.run([sys.executable, 'tools/package.py', '--game-folder', str(game), *stamp], check=True)
     print('\nReady: out/NFSV.app\nOpen it in Finder to play. Your original game copy and existing saves were not changed.', flush=True)
     if PROGRESS:
         emit({'done': str(ROOT / 'out/NFSV.app')})

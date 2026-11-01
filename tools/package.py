@@ -6,12 +6,15 @@ import plistlib
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 import pefile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.bundled_game import clone_tree  # noqa: E402
 
 
 def windows_icon(executable):
@@ -62,14 +65,14 @@ def copy_game_files(source, destination):
     for name in ('GameData', 'FEData', 'SaveData', 'Drivers', 'PatchNotices'):
         path = source / name
         if path.is_dir():
-            shutil.copytree(path, destination / name)
+            clone_tree(path, destination / name)
     for name in ('Porsche.exe', 'fe.txt', 'install.txt', 'version.txt', 'patch-manifest.json', 'build-input.json'):
         path = source / name
         if path.is_file():
             shutil.copyfile(path, destination / name)
 
 
-def package(game):
+def package(game, builder_version=''):
     os.chdir(ROOT)
     if not Path('out/nfsv').is_file() or not Path('gen/all/image.h').is_file():
         raise ValueError('native compilation inputs are missing; run ./build.sh with your game copy')
@@ -84,7 +87,10 @@ def package(game):
                         '-framework', 'Cocoa', '-o', str(macos / 'NFSV')], check=True)
         shutil.copy2('out/nfsv', macos / 'NFSVEngine')
         copy_game_files(game, contents / 'Resources/Game')
-        write_app_icon((Path(game) / 'OriginalGame.ico').read_bytes(), contents / 'Resources/NFSV.icns')
+        if (Path(game) / 'OriginalGame.ico').is_file():
+            write_app_icon((Path(game) / 'OriginalGame.ico').read_bytes(), contents / 'Resources/NFSV.icns')
+        else:  # reused from the app being updated, whose original executable is gone
+            shutil.copyfile(Path(game) / 'OriginalGame.icns', contents / 'Resources/NFSV.icns')
         notices = contents / 'Resources/ThirdPartyNotices'
         notices.mkdir()
         for path in (ROOT / 'third_party').glob('*LICENSE'):
@@ -97,6 +103,8 @@ def package(game):
             'LSMinimumSystemVersion': '11.0', 'LSMultipleInstancesProhibited': True,
             'NSHighResolutionCapable': True,
         }
+        if builder_version:  # lets the launcher look for a newer Builder and the Builder update this app
+            plist['NFSBuilderVersion'] = builder_version
         with (contents / 'Info.plist').open('wb') as f:
             plistlib.dump(plist, f)
         for target in (macos / 'NFSVEngine', staged):
@@ -117,8 +125,9 @@ def package(game):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--game-folder', required=True, type=Path)
+    p.add_argument('--builder-version', default='')
     args = p.parse_args()
-    package(args.game_folder.resolve())
+    package(args.game_folder.resolve(), args.builder_version)
 
 
 if __name__ == '__main__':

@@ -59,6 +59,20 @@ class BuilderCliTests(unittest.TestCase):
         self.assertIn(detected, err.getvalue())
         self.assertEqual(before, snapshot(fixture.game))
 
+    def test_check_game_accepts_the_game_inside_an_app_and_only_reads_it(self):
+        from test_bundled_game import LINKED_SHA, make_app
+        with tempfile.TemporaryDirectory() as tmp:
+            app = make_app(tmp)
+            before = snapshot(app)
+            with patch('tools.bundled_game.LINKED_EXE_SHA', LINKED_SHA):
+                code, events = run('check-game', str(app))
+            self.assertEqual((code, events), (0, [{'game': 'ok', 'version': 'USA v3.2', 'app': True}]))
+            self.assertEqual(snapshot(app), before)
+            (app / 'Contents/Resources/Game/fe.txt').write_bytes(b'changed')
+            code, events = run('check-game', str(app))
+            self.assertEqual(code, 1)
+            self.assertIn('The game inside NFSV.app cannot be reused', events[-1]['error'])
+
     def test_cancel_removes_temporary_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             game = Path(tmp) / 'game'

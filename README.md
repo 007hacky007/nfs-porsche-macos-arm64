@@ -58,7 +58,7 @@ The Builder shows a checklist. Green rows are ready, orange rows are handled aut
 - **Xcode command line tools**: **Install...** opens Apple's installer (about 2 GB).
 - **Build tools**: the Builder downloads its own private Python (about 90 MB) into `~/Library/Application Support/NFSV Builder`. It never touches other Python installs.
 - **Patches**: downloaded during the build if they are not already cached.
-- **Game copy**: click **Choose...** or drag a folder, `.iso`, `.bin` or `.cue` onto the window. If your copy is rejected, click **Which copy works?** to see the supported releases with their file counts, sizes and checksums.
+- **Game copy**: click **Choose...** or drag a folder, `.iso`, `.bin` or `.cue` onto the window. When NFSV.app is already installed, the Builder uses the game inside it, see [Updating](#updating). If your copy is rejected, click **Which copy works?** to see the supported releases with their file counts, sizes and checksums.
 - **Destination**: where NFSV.app is placed. The default is Applications.
 - **Free disk space**: enough room for the build.
 
@@ -76,12 +76,21 @@ Open NFSV.app. The launcher appears first:
 - **Hide macOS cursor while playing**: on by default.
 - **Enhanced graphics**: smoother edges and sharper textures, on by default. Turn it off for the original look or a higher frame rate on older Macs.
 - **Controller vibration**: plays the game's force feedback on a game controller, on by default.
+- **Check for updates**: once a day the launcher asks GitHub whether a newer NFSV Builder is out, on by default. Off means the launcher makes no network request.
 
 Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
 
 Saves and the game log live in `~/Library/Application Support/NFSV`. Rebuilding or replacing the app does not touch them, so existing careers keep their progress. Quit the game before rebuilding.
 
 NFSV.app carries all of its game files inside, so it never asks for a game folder and keeps working after you move it to another folder. Your original game copy is only needed to build the app again. Nothing inside the app is changed while you play. If NFSV.app says it is incomplete, build it again with NFSV Builder.
+
+### Updating
+
+New features come with a new NFSV Builder release. When one is out, the launcher shows **NFSV Builder X.Y.Z is available** with **What's new**, **Download** and **Not now**. **Download** opens the disk image in your browser; the launcher never downloads or runs anything itself. **Not now** hides the notice until a newer version appears.
+
+Open the new NFSV Builder. It finds your NFSV.app in the destination folder (or in Applications) and uses the game files inside it, so you do not need your original game copy again. The game row says so, and the button reads **Update NFSV.app** with the old and new version. Your current app is only read and stays in place until the new one is completely built; quit the game before updating. Saves and settings are kept.
+
+The Builder reuses the game inside the app only when it is exactly what this Builder version would prepare: the same supported game release, the same patches and the same prepared files, checked by their checksums. If the app was changed, is incomplete, or a newer Builder prepares the game differently, the row says why and asks for your original game copy. Apps built from Terminal do not check for updates; build them again to update.
 
 ### Game controllers
 
@@ -162,11 +171,13 @@ The script sets up `.venv`, extracts images, verifies all game-data and executab
 
 When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications or any other folder; it contains all of the prepared game files and never asks for a game folder. The launcher only accepts the game files inside its own `Contents/Resources/Game` and refuses to start if they are missing or do not match the build. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
 
+To build again without the original copy, pass an existing app instead: `./build.sh /Applications/NFSV.app`. Its game is reused under the same checks as in [Updating](#updating), the app itself is only read, and the result is again `out/NFSV.app`.
+
 If a checksum fails, use a complete, unmodified supported copy. Renaming an unsupported executable or changing a version string will not make it compatible. `./build.sh --help` shows the accepted inputs.
 
 ## Launcher settings
 
-The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, game controller stick sensitivity, macOS cursor visibility, enhanced graphics and controller vibration. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
+The launcher offers race resolution, fullscreen/windowed mode, a frame-rate limit (game default, 30, 60 or 120 FPS), HUD size, game controller stick sensitivity, macOS cursor visibility, enhanced graphics, controller vibration and the update check. Click **Play** to save your choices and start the game, or **Quit** to leave without saving edits. Choices are remembered for the next launch.
 
 - **HUD size** ranges from 25% to 100% of the automatic resolution scaling, with the original HUD size as a minimum. Try 75% for a smaller HUD in 4K; 100% keeps the full automatic size.
 - **Use in-game setting** lets the game's graphics menu control race resolution; choosing a specific launcher resolution overrides that setting for the session and selects 32-bit color when available. Menus and movies keep their original resolution.

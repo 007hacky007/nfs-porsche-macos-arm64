@@ -104,7 +104,7 @@ public func removeOldWorkspaces(_ paths: BuilderPaths, keeping version: String) 
 
 /// Ready when the private Python is installed and the workspace venv was built from the
 /// current requirements.txt. Otherwise red: roughly 90 MB (Python archive plus packages) to
-/// fetch, or only the packages when Python is already there (after Remove build files).
+/// fetch, or only the packages when Python is already there (after Delete temporary files).
 public func buildToolsCheck(paths: BuilderPaths, version: String) -> CheckState {
     let workspace = paths.workspace(version: version)
     guard PythonRuntime.isInstalled(paths) else { return .blocked("about 90 MB download") }
@@ -114,4 +114,53 @@ public func buildToolsCheck(paths: BuilderPaths, version: String) -> CheckState 
           recorded.trimmingCharacters(in: .whitespacesAndNewlines) == requirements
     else { return .blocked("Packages need to be set up again (small download)") }
     return .ready("Installed")
+}
+
+/// The disk space the files under `url` take (allocated, so APFS clones and sparse files count
+/// as the space they use). 0 when it is not there.
+public func allocatedSize(of url: URL) -> Int64 {
+    let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isRegularFileKey]
+    guard let walker = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) else { return 0 }
+    var total: Int64 = 0
+    for case let file as URL in walker {
+        guard let values = try? file.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+        total += Int64(values.totalFileAllocatedSize ?? 0)
+    }
+    return total
+}
+
+/// "612 MB", "1.4 GB": sizes as Finder shows them.
+public func sizeText(_ bytes: Int64) -> String {
+    ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+}
+
+/// The texts of the "Delete temporary files" control after a build. It deletes only this
+/// version's workspace (`BuilderPaths.workspace`): the copied build scripts, the Python packages
+/// (.venv), the Builder's patched copy of the game files (local/builds), the translated and
+/// compiled code and the build's own copy of NFSV.app. The installed NFSV.app, the player's game
+/// copy, saves and settings (~/Library/Application Support/NFSV), the private Python and the patch
+/// download cache (~/Library/Caches/NFSV) are not touched.
+public enum TemporaryFiles {
+    /// `bytes` is nil until the workspace has been measured.
+    public static func button(bytes: Int64?) -> String {
+        "Delete temporary files" + (bytes.map { " (\(sizeText($0)))" } ?? "")
+    }
+
+    public static let caption = "Only the Builder's own work files. NFSV.app, your game copy, saves and settings stay, "
+        + "and so do the Builder's Python and the downloaded patches. An update makes them again (a small download)."
+
+    /// The first caption line: exactly the folder the button deletes, with ~ for the home folder
+    /// so no user name shows. `workspace` is `BuilderPaths.workspace(version:)`.
+    public static func deletesLine(workspace: URL) -> String {
+        "Deletes \((workspace.path as NSString).abbreviatingWithTildeInPath)"
+    }
+
+    /// The button's tooltip: what that folder holds.
+    public static let help = "The Builder's work folder for this version: its copy of the build scripts, "
+        + "its Python packages, its patched copy of the game files, the translated and compiled game code and "
+        + "the copy of NFSV.app it made before installing it."
+
+    public static func deleted(bytes: Int64?) -> String {
+        "Temporary files deleted" + (bytes.map { ", \(sizeText($0)) freed" } ?? "") + ". NFSV.app and your game are unchanged."
+    }
 }

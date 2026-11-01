@@ -465,6 +465,7 @@ final class BuilderModel: ObservableObject {
                 case let .success(app):
                     buildFilesRemoved = false
                     phase = .finished(app)
+                    measureBuildFiles()
                 case let .failure(error as InstallError) where error.details == nil && isNFSVRunning():
                     appendLog(error.message)
                     phase = .quitToInstall(built: built)
@@ -486,8 +487,26 @@ final class BuilderModel: ObservableObject {
         refresh()
     }
 
-    /// The workspace is renamed aside first, so quitting during the slow delete cannot leave a
-    /// marked but incomplete workspace behind; the next start sweeps whatever is left.
+    /// The size of the Builder's work files (the workspace), shown on the delete button.
+    @Published private(set) var buildFilesBytes: Int64? = nil
+
+    private func measureBuildFiles() {
+        buildFilesBytes = nil
+        let workspace = paths.workspace(version: version)
+        DispatchQueue.global(qos: .utility).async {
+            let bytes = allocatedSize(of: workspace)
+            DispatchQueue.main.async { [self] in
+                // A walk cut short by the delete would show too little.
+                if !buildFilesRemoved { buildFilesBytes = bytes }
+            }
+        }
+    }
+
+    /// Deletes only the Builder's own work files (its workspace, see `TemporaryFiles`). The
+    /// installed NFSV.app, the player's game copy, saves, settings, the private Python and the
+    /// patch cache are not touched. The workspace is renamed aside first, so quitting during the
+    /// slow delete cannot leave a marked but incomplete workspace behind; the next start sweeps
+    /// whatever is left.
     func removeBuildFiles() {
         let workspace = paths.workspace(version: version)
         workspaceReady = false

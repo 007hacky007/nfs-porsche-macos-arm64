@@ -62,7 +62,7 @@ The Builder shows a checklist. Green rows are ready, orange rows are handled aut
 - **Destination**: where NFSV.app is placed. The default is Applications.
 - **Free disk space**: enough room for the build.
 
-Fix the red rows, then click **Build NFSV.app**. When it finishes you can click **Play**, **Show in Finder** or **Remove build files**.
+Fix the red rows, then click **Build NFSV.app**. When it finishes you can click **Play**, **Show in Finder** or **Delete temporary files**, which shows its size and deletes only the Builder's own work files.
 
 ### Playing
 
@@ -192,7 +192,7 @@ Saves and the game log live in `~/Library/Application Support/NFSV`. Rebuilding 
 
 The script keeps Python dependencies in `.venv`, extracted/prepared game files in `local/builds`, and generated C, objects and app output in `gen` and `out`. These paths are ignored by git. Patch archives stay outside the repository, in `~/Library/Caches/NFSV/patches`. Every cached download is checked before use. Upstream patch notices are retained with the prepared files and in the app.
 
-NFSV Builder shares the patch cache `~/Library/Caches/NFSV/patches` with `./build.sh`. Its private Python and build files live in `~/Library/Application Support/NFSV Builder`. **Remove build files**, offered after a successful build, frees the space used while building; Python and the downloaded patches are kept.
+NFSV Builder shares the patch cache `~/Library/Caches/NFSV/patches` with `./build.sh`. Its private Python and build files live in `~/Library/Application Support/NFSV Builder`. **Delete temporary files**, offered after a successful build with its size, deletes only `~/Library/Application Support/NFSV Builder/<version>`: the Builder's copy of the build scripts, its Python packages, its patched copy of the game files, the translated and compiled code and the copy of NFSV.app it made before installing it. NFSV.app, your game copy, saves and settings stay, and so do the Builder's Python and the downloaded patches. An update makes the work files again (a small download).
 
 ## How native is it?
 

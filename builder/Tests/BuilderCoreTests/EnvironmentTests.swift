@@ -245,7 +245,7 @@ final class EnvironmentTests: XCTestCase {
         let packages = CheckState.blocked("Packages need to be set up again (small download)")
         try write("numpy\nscipy\n", to: req)
         XCTAssertEqual(buildToolsCheck(paths: paths, version: "1"), packages)
-        // Python present, venv removed (Remove build files).
+        // Python present, venv removed (Delete temporary files).
         try fm.removeItem(at: ws.appendingPathComponent(".venv"))
         XCTAssertEqual(buildToolsCheck(paths: paths, version: "1"), packages)
     }
@@ -282,5 +282,34 @@ final class EnvironmentTests: XCTestCase {
         }
         // No attribute present: still fine.
         try removeQuarantine(at: dir)
+    }
+
+    /// The size on the delete button: what the files really take on disk.
+    func testAllocatedSizeAndSizeText() throws {
+        let dir = tmp.appendingPathComponent("ws")
+        XCTAssertEqual(allocatedSize(of: dir), 0, "a workspace that is not there takes nothing")
+        try fm.createDirectory(at: dir.appendingPathComponent("gen"), withIntermediateDirectories: true)
+        try Data(count: 3_000_000).write(to: dir.appendingPathComponent("gen/all.c"))
+        try Data(count: 1_000).write(to: dir.appendingPathComponent("small"))
+        let size = allocatedSize(of: dir)
+        XCTAssertGreaterThanOrEqual(size, 3_001_000)
+        XCTAssertLessThan(size, 3_200_000)
+        XCTAssertEqual(sizeText(612_000_000), "612 MB")
+    }
+
+    /// The delete control names its size once measured and says what stays.
+    func testTemporaryFilesTexts() {
+        XCTAssertEqual(TemporaryFiles.button(bytes: nil), "Delete temporary files")
+        XCTAssertEqual(TemporaryFiles.button(bytes: 612_000_000), "Delete temporary files (612 MB)")
+        XCTAssertEqual(TemporaryFiles.deleted(bytes: 612_000_000),
+                       "Temporary files deleted, 612 MB freed. NFSV.app and your game are unchanged.")
+        XCTAssertEqual(TemporaryFiles.deleted(bytes: nil), "Temporary files deleted. NFSV.app and your game are unchanged.")
+        XCTAssertTrue(TemporaryFiles.caption.hasPrefix("Only the Builder's own work files. NFSV.app, your game copy, saves and settings stay"))
+        XCTAssertTrue(TemporaryFiles.caption.contains("Python and the downloaded patches"))
+        let workspace = BuilderPaths().workspace(version: "1.2.3")
+        XCTAssertEqual(TemporaryFiles.deletesLine(workspace: workspace), "Deletes ~/Library/Application Support/NFSV Builder/1.2.3")
+        for text in [TemporaryFiles.caption, TemporaryFiles.help, TemporaryFiles.deleted(bytes: 1)] {
+            XCTAssertNil(text.range(of: "[\\u2013\\u2014]", options: .regularExpression), "hyphen-minus only")
+        }
     }
 }

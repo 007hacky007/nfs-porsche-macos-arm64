@@ -1,38 +1,18 @@
 #import <Cocoa/Cocoa.h>
-#import <CommonCrypto/CommonDigest.h>
 #include "image.h"
+#import "game.h"
 #import "settings.h"
 
-static NSString *validate(NSURL *folder){
-    NSFileManager *files=NSFileManager.defaultManager;
-    for(NSString *name in @[@"GameData",@"FEData",@"fe.txt",@"install.txt"]){
-        if(![files fileExistsAtPath:[folder URLByAppendingPathComponent:name].path])return [NSString stringWithFormat:@"The selected folder is missing %@.",name];
-    }
-    NSData *exe=[NSData dataWithContentsOfURL:[folder URLByAppendingPathComponent:@"Porsche.exe"] options:NSDataReadingMappedIfSafe error:nil];
-    if(!exe)return @"The selected folder is missing Porsche.exe.";
-    if(exe.length!=IMAGE_FILE_SIZE)return @"This build requires the game folder prepared for this native build. See the README preparation command.";
-    unsigned char digest[CC_SHA256_DIGEST_LENGTH];CC_SHA256(exe.bytes,(CC_LONG)exe.length,digest);
-    NSMutableString *hex=[NSMutableString new];for(unsigned i=0;i<sizeof digest;i++)[hex appendFormat:@"%02x",digest[i]];
-    if(![hex isEqualToString:@IMAGE_SHA256])return @"This build requires the game folder prepared for this native build. See the README preparation command.";
-    return nil;
-}
 static void alert(NSString *message){
     NSAlert *a=[NSAlert new];a.messageText=@"NFSV";a.informativeText=message;[a addButtonWithTitle:@"OK"];[a runModal];
 }
 int main(void){@autoreleasepool{
     [NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     NSUserDefaults *settings=NSUserDefaults.standardUserDefaults;
-    NSURL *folder=[NSBundle.mainBundle URLForResource:@"Game" withExtension:nil];
-    if(!folder){NSString *saved=[settings stringForKey:@"GameFolder"];folder=saved?[NSURL fileURLWithPath:saved isDirectory:YES]:nil;}
-    if(!folder||validate(folder)){
-        for(;;){
-            NSOpenPanel *panel=NSOpenPanel.openPanel;panel.title=@"NFSV";panel.message=@"Choose your extracted NFSV game folder.";
-            panel.canChooseFiles=NO;panel.canChooseDirectories=YES;panel.allowsMultipleSelection=NO;panel.prompt=@"Play";
-            [NSApp activateIgnoringOtherApps:YES];if([panel runModal]!=NSModalResponseOK)return 0;
-            folder=panel.URL;NSString *problem=validate(folder);if(!problem)break;alert(problem);
-        }
-        [settings setObject:folder.path forKey:@"GameFolder"];
-    }
+    launcher_forget_game_folder(settings);
+    NSString *problem=nil;
+    NSURL *folder=launcher_bundled_game(NSBundle.mainBundle.resourceURL,IMAGE_FILE_SIZE,@IMAGE_SHA256,&problem);
+    if(!folder){[NSApp activateIgnoringOtherApps:YES];alert(problem);return 1;}
     if(!launcher_choose_settings(settings))return 0;
     NSError *error=nil;NSFileManager *files=NSFileManager.defaultManager;
     NSURL *support=[[files URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask].firstObject URLByAppendingPathComponent:@"NFSV" isDirectory:YES];

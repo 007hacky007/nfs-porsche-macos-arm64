@@ -81,6 +81,8 @@ Click **Play** to save your choices and start the game, or **Quit** to leave wit
 
 Saves and the game log live in `~/Library/Application Support/NFSV`. Rebuilding or replacing the app does not touch them, so existing careers keep their progress. Quit the game before rebuilding.
 
+NFSV.app carries all of its game files inside, so it never asks for a game folder and keeps working after you move it to another folder. Your original game copy is only needed to build the app again. Nothing inside the app is changed while you play. If NFSV.app says it is incomplete, build it again with NFSV Builder.
+
 ### Game controllers
 
 Connect the controller to the Mac first, in **System Settings > Bluetooth** (or with a USB cable). It can be connected before or after starting the game.
@@ -158,7 +160,7 @@ For BIN/CUE, keep the BIN beside the CUE with the filename recorded in it. Use t
 
 The script sets up `.venv`, extracts images, verifies all game-data and executable checksums, downloads and verifies patches, translates the supported code, compiles it and signs the app locally. Your input copy and existing saves are never modified. Later builds reuse verified downloads and prepared files.
 
-When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications; it contains a private copy of the prepared files and needs no separate game-folder selection. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
+When it finishes, open **`out/NFSV.app`** in Finder. You can move the app to Applications or any other folder; it contains all of the prepared game files and never asks for a game folder. The launcher only accepts the game files inside its own `Contents/Resources/Game` and refuses to start if they are missing or do not match the build. Keep generated apps and game files out of version control. Quit the game before rebuilding an existing app.
 
 If a checksum fails, use a complete, unmodified supported copy. Renaming an unsupported executable or changing a version string will not make it compatible. `./build.sh --help` shows the accepted inputs.
 

@@ -80,7 +80,7 @@ def package(game):
         macos = contents / 'MacOS'
         macos.mkdir(parents=True)
         subprocess.run(['clang', '-O2', '-fobjc-arc', '-arch', 'arm64', '-mmacosx-version-min=11.0',
-                        '-Igen/all', 'launcher/main.m', 'launcher/settings.m', 'runtime/display.c',
+                        '-Igen/all', 'launcher/main.m', 'launcher/game.m', 'launcher/settings.m', 'runtime/display.c',
                         '-framework', 'Cocoa', '-o', str(macos / 'NFSV')], check=True)
         shutil.copy2('out/nfsv', macos / 'NFSVEngine')
         copy_game_files(game, contents / 'Resources/Game')

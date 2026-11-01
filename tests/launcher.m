@@ -1,5 +1,6 @@
 #import <Cocoa/Cocoa.h>
 #import "../launcher/settings.h"
+#import "../launcher/game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %s:%d: %s\n",__FILE__,__LINE__,#x);exit(1);}}while(0)
@@ -47,6 +48,32 @@ int main(void){@autoreleasepool{
     env=launcher_environment(defaults,@{});
     CHECK(!env[@"NFSV_RESOLUTION"]&&!env[@"NFSV_FPS_LIMIT"]&&[env[@"NFSV_HIDE_CURSOR"] isEqual:@"1"]);
     CHECK([env[@"NFSV_ENHANCED_GRAPHICS"] isEqual:@"1"]&&[env[@"NFSV_PAD_RUMBLE"] isEqual:@"1"]);
+    [defaults setObject:@"/somewhere/else" forKey:@"GameFolder"];
+    launcher_forget_game_folder(defaults);
+    CHECK(![defaults objectForKey:@"GameFolder"]);
+    launcher_forget_game_folder(defaults);
     [defaults removePersistentDomainForName:domain];
-    puts("Launcher: defaults, saved choices, inherited environment and invalid preferences passed without displaying a window");
+
+    // The app plays only the game files inside its own Resources/Game.
+    NSFileManager *files=NSFileManager.defaultManager;
+    NSURL *resources=[files.temporaryDirectory URLByAppendingPathComponent:[@"nfsv-launcher-test-" stringByAppendingString:NSUUID.UUID.UUIDString] isDirectory:YES];
+    CHECK([files createDirectoryAtURL:resources withIntermediateDirectories:YES attributes:nil error:nil]);
+    NSString *sha=@"f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d"; // SHA-256 of "fixture"
+    NSString *problem=nil;
+    CHECK(!launcher_bundled_game(nil,7,sha,&problem)&&[problem containsString:@"Build NFSV.app again with NFSV Builder"]);
+    problem=nil;CHECK(!launcher_bundled_game(resources,7,sha,&problem)&&[problem containsString:@"game files are missing."]);
+    NSURL *game=[resources URLByAppendingPathComponent:@"Game" isDirectory:YES];
+    for(NSString *name in @[@"GameData",@"FEData"])
+        CHECK([files createDirectoryAtURL:[game URLByAppendingPathComponent:name] withIntermediateDirectories:YES attributes:nil error:nil]);
+    problem=nil;CHECK(!launcher_bundled_game(resources,7,sha,&problem)&&[problem containsString:@"missing fe.txt"]);
+    for(NSString *name in @[@"fe.txt",@"install.txt"])
+        CHECK([@"" writeToURL:[game URLByAppendingPathComponent:name] atomically:NO encoding:NSUTF8StringEncoding error:nil]);
+    problem=nil;CHECK(!launcher_bundled_game(resources,7,sha,&problem)&&[problem containsString:@"missing Porsche.exe"]);
+    CHECK([@"fixture" writeToURL:[game URLByAppendingPathComponent:@"Porsche.exe"] atomically:NO encoding:NSUTF8StringEncoding error:nil]);
+    problem=nil;CHECK(!launcher_bundled_game(resources,8,sha,&problem)&&[problem containsString:@"does not match"]);
+    problem=nil;CHECK(!launcher_bundled_game(resources,7,[sha uppercaseString],&problem)&&[problem containsString:@"does not match"]);
+    problem=@"stale";NSURL *found=launcher_bundled_game(resources,7,sha,&problem);
+    CHECK(found&&!problem&&[found.path isEqualToString:game.path]);
+    CHECK([files removeItemAtURL:resources error:nil]);
+    puts("Launcher: defaults, saved choices, inherited environment, invalid preferences, the bundled game check and the dropped game folder passed without displaying a window");
 }}

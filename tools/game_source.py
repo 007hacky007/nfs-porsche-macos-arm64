@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import NamedTuple
 
+from tools.quarantine import require_quarantine_kept
+
 # The accepted releases, as listed in the README tables "Checksums and byte sizes". Sizes are exact
 # byte counts of the extracted files; the data fingerprint is assets_digest() of GameData, FEData,
 # fe.txt and install.txt.
@@ -116,7 +118,8 @@ def verify_game(root):
 
 def clone_tree(source, destination):
     """Copy a file or folder, as APFS clones where the volume supports them (cp falls back to
-    copying). Extended attributes come along, so a download's quarantine stays."""
+    copying). Extended attributes come along, so a download's quarantine stays; a fallback copy
+    that would lose it fails instead."""
     try:
         subprocess.run(['/bin/cp', '-cR', str(source), str(destination)], check=True, capture_output=True)
     except (OSError, subprocess.CalledProcessError):
@@ -124,26 +127,47 @@ def clone_tree(source, destination):
             shutil.rmtree(destination)
         elif Path(destination).exists() or Path(destination).is_symlink():
             Path(destination).unlink()
-        if Path(source).is_dir() and not Path(source).is_symlink():
-            shutil.copytree(source, destination, symlinks=True)
-        else:
-            shutil.copy2(source, destination, follow_symlinks=False)
+        # Not shutil: on macOS its copies keep no extended attributes and no quarantine on folders.
+        subprocess.run(['/bin/cp', '-pR', str(source), str(destination)], check=True, capture_output=True)
+        require_quarantine_kept(source, destination)
 
 
 def finder_junk(name):
     return name == '.DS_Store' or name.startswith('._')
 
 
-MACOS_BUNDLES = ('.app', '.framework', '.bundle', '.plugin', '.kext', '.pkg', '.mpkg', '.workflow')
-MACOS_FILES = ('.command', '.tool', '.sh', '.dylib', '.so', '.scpt')
+# macOS code by name: bundles and packages (left out as whole folders), then single files.
+MACOS_BUNDLES = ('.app', '.appex', '.framework', '.bundle', '.plugin', '.kext', '.pkg', '.mpkg', '.workflow',
+                 '.action', '.xpc', '.prefpane', '.saver', '.qlgenerator', '.mdimporter', '.scptd', '.wdgt',
+                 '.component', '.systemextension')
+MACOS_FILES = ('.command', '.tool', '.sh', '.bash', '.zsh', '.csh', '.ksh', '.fish', '.py', '.pl', '.rb', '.php',
+               '.scpt', '.applescript', '.terminal', '.dylib', '.so', '.jar')
+# ...and by contents: a script ("#!") or a Mach-O program or library, under any name.
 MACH_O = {bytes.fromhex(magic) for magic in ('feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca')}
+
+
+def is_bundle(path):
+    """A macOS bundle or package folder: by its extension, or by a Contents/Info.plist inside."""
+    if path.name.casefold().endswith(MACOS_BUNDLES):
+        return True
+    contents = [p for p in path.iterdir() if p.name.casefold() == 'contents' and p.is_dir() and not p.is_symlink()]
+    return any(p.name.casefold() == 'info.plist' for c in contents for p in c.iterdir())
+
+
+def is_macos_code(path):
+    if path.name.casefold().endswith(MACOS_FILES):
+        return True
+    with path.open('rb') as f:
+        head = f.read(4)
+    return head.startswith(b'#!') or head in MACH_O
 
 
 def leave_out(root):
     """Removes from `root` (a game copied from the player's copy) what never goes into NFSV.app:
     Finder's .DS_Store and ._ files, symbolic links (codesign refuses links that leave the app)
     and macOS code. The game is Windows files only, and a Mac program hidden in a downloaded copy
-    must not end up inside a signed app. Windows files stay. Returns the removed paths."""
+    must not end up inside a signed app. Windows files stay, none of them executable: the game
+    only reads them (Porsche.exe is translated, never run). Returns the removed paths."""
     removed = []
 
     def remove(path, why):
@@ -162,7 +186,7 @@ def leave_out(root):
                 remove(path, 'symbolic link')
             elif finder_junk(name):
                 remove(path, 'Finder file')
-            elif name.casefold().endswith(MACOS_BUNDLES):
+            elif is_bundle(path):
                 remove(path, 'macOS code')
         directories[:] = [d for d in directories if (folder / d).is_dir()]
         for name in sorted(names):
@@ -171,12 +195,14 @@ def leave_out(root):
                 remove(path, 'symbolic link')
             elif finder_junk(name):
                 remove(path, 'Finder file')
-            elif name.casefold().endswith(MACOS_FILES):
+            elif not path.is_file():
+                remove(path, 'not a regular file')
+            elif is_macos_code(path):
                 remove(path, 'macOS code')
-            elif path.is_file():
-                with path.open('rb') as f:
-                    if f.read(4) in MACH_O:
-                        remove(path, 'macOS code')
+            else:
+                mode = path.stat().st_mode
+                if mode & 0o111:
+                    path.chmod(mode & ~0o111)
     return removed
 
 

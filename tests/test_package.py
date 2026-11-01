@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools import game_source, package
 
@@ -55,6 +56,13 @@ class PackageTests(unittest.TestCase):
         (copy / 'setup').mkdir()
         (copy / 'setup/run.command').write_text('#!/bin/sh\n')
         (copy / 'setup/data1.cab').write_bytes(b'cab')
+        (copy / 'setup/readme.dat').write_text('#!/bin/sh\necho hidden\n')          # a script under a game name
+        (copy / 'Helper/Contents/MacOS').mkdir(parents=True)                         # a bundle without an extension
+        (copy / 'Helper/Contents/Info.plist').write_bytes(b'<plist/>')
+        (copy / 'Helper/Contents/MacOS/Helper').write_bytes(b'data')
+        (copy / 'setup/tool.JAR').write_bytes(b'PK')
+        (copy / 'setup/Open.terminal').write_bytes(b'<plist/>')
+        (copy / 'DirectX/DXSETUP.EXE').chmod(0o755)
         (copy / 'link').symlink_to('/usr/bin')
         (copy / '.DS_Store').write_bytes(b'finder')
         mark = '0081;00000000;Test;'
@@ -76,9 +84,45 @@ class PackageTests(unittest.TestCase):
         package.copy_game_files(prepared, game)
         self.assertEqual(tree(game), expected)
         self.assertEqual(quarantine(game / 'DirectX/DXSETUP.EXE'), mark, 'game data keeps its quarantine')
+        for path in game.rglob('*'):
+            if path.is_file():
+                self.assertFalse(path.stat().st_mode & 0o111, f'{path.name} is not executable')
         subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(app)], check=True, capture_output=True)
         subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(app)], check=True,
                        capture_output=True)
+
+    def test_a_fallback_copy_keeps_the_quarantine_or_fails(self):
+        """When cp cannot clone, the plain copy keeps the quarantine; a copy that would lose it
+        fails instead of putting unchecked files into the app."""
+        source = self.root / 'copy'
+        (source / 'GameData').mkdir(parents=True)
+        (source / 'GameData/car.bin').write_bytes(b'car')
+        mark = '0081;00000000;Test;'
+        for path in (source / 'GameData', source / 'GameData/car.bin'):
+            subprocess.run(['/usr/bin/xattr', '-w', 'com.apple.quarantine', mark, str(path)], check=True)
+        real = subprocess.run
+        calls = []
+
+        def no_clones(command, **kwargs):
+            calls.append(command[1])
+            if command[:2] == ['/bin/cp', '-cR']:
+                raise subprocess.CalledProcessError(1, command)
+            return real(command, **kwargs)
+        with mock.patch.object(game_source.subprocess, 'run', no_clones):
+            game_source.clone_tree(source / 'GameData', self.root / 'kept')
+        self.assertEqual(calls, ['-cR', '-pR'])
+        self.assertIsNotNone(quarantine(self.root / 'kept'))
+        self.assertIsNotNone(quarantine(self.root / 'kept/car.bin'))
+
+        def losing(command, **kwargs):
+            if command[:2] == ['/bin/cp', '-cR']:
+                raise subprocess.CalledProcessError(1, command)
+            result = real(command, **kwargs)
+            real(['/usr/bin/xattr', '-cr', command[-1]], check=True)
+            return result
+        with mock.patch.object(game_source.subprocess, 'run', losing):
+            with self.assertRaisesRegex(OSError, 'lost its quarantine'):
+                game_source.clone_tree(source / 'GameData', self.root / 'lost')
 
 
 if __name__ == '__main__':

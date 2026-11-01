@@ -65,6 +65,28 @@ class DiscTests(unittest.TestCase):
             disc.extract(self.root / 'game')
         self.assertEqual((self.root / 'game/Simulation/cop356_german.crp').read_bytes(), b'asset')
 
+    def test_extracted_files_keep_the_images_quarantine(self):
+        """Files written from a downloaded image get its quarantine, as a copy of it would."""
+        from tools.quarantine import quarantine_of, set_quarantine
+        mark = b'0081;00000000;Test;'
+        with self.subTest('iso'):
+            path = self.root / 'disc.iso'
+            path.write_bytes(image(raw=False))
+            set_quarantine(path, mark)
+            with Disc(path) as disc:
+                disc.extract(self.root / 'iso')
+            for item in ('iso', 'iso/Simulation', 'iso/Simulation/cop356_german.crp'):
+                self.assertEqual(quarantine_of(self.root / item), mark, item)
+        with self.subTest('cue'):
+            set_quarantine(self.cue(), mark)          # only the CUE is marked
+            with Disc(self.root / 'disc.cue') as disc:
+                disc.extract(self.root / 'cue')
+            self.assertEqual(quarantine_of(self.root / 'cue/Simulation/cop356_german.crp'), mark)
+        with self.subTest('none'):
+            with self.open_image(image()) as disc:
+                disc.extract(self.root / 'plain')
+            self.assertIsNone(quarantine_of(self.root / 'plain/Simulation/cop356_german.crp'))
+
     def test_cue_refuses_a_cooked_iso_declared_as_raw_bin(self):
         cue = self.cue()
         (self.root / 'disc.bin').write_bytes(image(raw=False))

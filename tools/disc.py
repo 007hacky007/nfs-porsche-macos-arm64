@@ -2,15 +2,20 @@
 """Read ISO9660/Joliet from BIN/CUE, MODE1/2352 MDF or a 2048-byte ISO.
 
 Usage: python3 tools/disc.py IMAGE NEW_DIRECTORY
-The image is read-only and the destination must not already exist.
+The image is read-only and the destination must not already exist. The extracted files get the
+image's quarantine, as a copy of a downloaded file would.
 """
 import argparse
 import json
 import re
 import shutil
 import struct
+import sys
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools.quarantine import quarantine_of, quarantine_tree  # noqa: E402
 
 
 class DiscError(ValueError):
@@ -45,8 +50,11 @@ class Disc:
     def __init__(self, path):
         self.path = Path(path)
         is_cue = self.path.suffix.lower() == '.cue'
+        # The image's quarantine (or, for a BIN without one, its CUE's) goes onto what is extracted.
+        self.quarantine = quarantine_of(self.path)
         if is_cue:
             self.path = cue_image(self.path)
+            self.quarantine = quarantine_of(self.path) or self.quarantine
         self.file = self.path.open('rb')
         try:
             size = self.path.stat().st_size
@@ -189,6 +197,7 @@ class Disc:
                         out.write(self.read_extent(extent, size))
                         extent += (size + 2047) // 2048
                         left -= size
+            quarantine_tree(destination, self.quarantine)
         except BaseException:
             shutil.rmtree(destination)
             raise

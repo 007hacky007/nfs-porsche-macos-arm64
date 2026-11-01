@@ -13,7 +13,7 @@ int main(void){@autoreleasepool{
     NSString *problem=nil;
     NSURL *folder=launcher_bundled_game(NSBundle.mainBundle.resourceURL,IMAGE_FILE_SIZE,@IMAGE_SHA256,&problem);
     if(!folder){[NSApp activateIgnoringOtherApps:YES];alert(problem);return 1;}
-    if(!launcher_choose_settings(settings))return 0;
+    if(!launcher_choose_settings(settings,NSBundle.mainBundle.infoDictionary[@"NFSBuilderVersion"]))return 0;
     NSError *error=nil;NSFileManager *files=NSFileManager.defaultManager;
     NSURL *support=[[files URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask].firstObject URLByAppendingPathComponent:@"NFSV" isDirectory:YES];
     NSURL *output=[support URLByAppendingPathComponent:@"out" isDirectory:YES];

@@ -17,7 +17,7 @@ run(['out/pixels-test'])
 run(['clang','-Iruntime','tests/display.c','runtime/display.c','-o','out/display-test'])
 run(['out/display-test'])
 if not PORTABLE:
-    run(['clang','-O1','-fobjc-arc','tests/launcher.m','launcher/game.m','launcher/settings.m','runtime/display.c',
+    run(['clang','-O1','-fobjc-arc','tests/launcher.m','launcher/game.m','launcher/settings.m','launcher/update.m','runtime/display.c',
          '-framework','Cocoa','-o','out/launcher-test'])
     run(['out/launcher-test'])
     run(['clang','-O1','-DNFSV_NO_IMAGE','-Iruntime','-include','gen/all/image.h',

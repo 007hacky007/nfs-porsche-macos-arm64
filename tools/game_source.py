@@ -143,7 +143,7 @@ MACOS_BUNDLES = ('.app', '.appex', '.framework', '.bundle', '.plugin', '.kext', 
 MACOS_FILES = ('.command', '.tool', '.sh', '.bash', '.zsh', '.csh', '.ksh', '.fish', '.py', '.pl', '.rb', '.php',
                '.scpt', '.applescript', '.terminal', '.dylib', '.so', '.jar')
 # ...and by contents: a script ("#!") or a Mach-O program or library, under any name.
-MACH_O = {bytes.fromhex(magic) for magic in ('feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca')}
+MACH_O = {bytes.fromhex(magic) for magic in ('feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca')}
 
 
 def is_bundle(path):
